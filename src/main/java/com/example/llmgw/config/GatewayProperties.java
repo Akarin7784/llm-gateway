@@ -14,8 +14,17 @@ public class GatewayProperties {
     private Quota quota = new Quota();
     private Cache cache = new Cache();
     private Routing routing = new Routing();
+    private Billing billing = new Billing();
     private List<UpstreamConfig> upstreams = new ArrayList<>();
     private List<TenantConfig> tenants = new ArrayList<>();
+
+    public Billing getBilling() {
+        return billing;
+    }
+
+    public void setBilling(Billing billing) {
+        this.billing = billing;
+    }
 
     public Routing getRouting() {
         return routing;
@@ -406,6 +415,63 @@ public class GatewayProperties {
 
         public void setAssumedCompletionTokens(long assumedCompletionTokens) {
             this.assumedCompletionTokens = assumedCompletionTokens;
+        }
+    }
+
+    public static class Billing {
+        private boolean enabled = true;
+        private int queueCapacity = 10_000;
+        private int batchSize = 200;
+        private Duration flushInterval = Duration.ofMillis(250);
+        private Duration shutdownDrainTimeout = Duration.ofSeconds(5);
+        private String spillFile = "data/ledger-spill.jsonl";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getQueueCapacity() {
+            return queueCapacity;
+        }
+
+        public void setQueueCapacity(int queueCapacity) {
+            this.queueCapacity = queueCapacity;
+        }
+
+        public int getBatchSize() {
+            return batchSize;
+        }
+
+        public void setBatchSize(int batchSize) {
+            this.batchSize = batchSize;
+        }
+
+        public Duration getFlushInterval() {
+            return flushInterval;
+        }
+
+        public void setFlushInterval(Duration flushInterval) {
+            this.flushInterval = flushInterval;
+        }
+
+        public Duration getShutdownDrainTimeout() {
+            return shutdownDrainTimeout;
+        }
+
+        public void setShutdownDrainTimeout(Duration shutdownDrainTimeout) {
+            this.shutdownDrainTimeout = shutdownDrainTimeout;
+        }
+
+        public String getSpillFile() {
+            return spillFile;
+        }
+
+        public void setSpillFile(String spillFile) {
+            this.spillFile = spillFile;
         }
     }
 }

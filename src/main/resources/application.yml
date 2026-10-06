@@ -15,6 +15,17 @@ server:
 spring:
   application:
     name: llm-gateway
+  datasource:
+    # File-backed H2 in MySQL mode so the ledger survives restarts and the statements are portable to
+    # a real MySQL without touching the SQL.
+    url: jdbc:h2:file:./data/ledger;MODE=MySQL;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  sql:
+    init:
+      mode: always
+      continue-on-error: false
   jackson:
     deserialization:
       # Pinned rather than inherited: the canonical DTO ignores what it does not model and the raw
@@ -78,6 +89,13 @@ gateway:
     cost-weight: 0.5
     assumed-prompt-tokens: 500
     assumed-completion-tokens: 500
+  billing:
+    enabled: true
+    queue-capacity: 10000
+    batch-size: 200
+    flush-interval: 250ms
+    shutdown-drain-timeout: 5s
+    spill-file: data/ledger-spill.jsonl
   upstreams:
     - name: mock-primary
       vendor: openai-compatible

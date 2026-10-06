@@ -1,5 +1,6 @@
 target/
 logs/
+data/
 tools/apache-maven-*/
 tools/cp.txt
 .idea/

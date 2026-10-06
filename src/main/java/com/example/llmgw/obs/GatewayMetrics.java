@@ -116,6 +116,28 @@ public class GatewayMetrics {
         registry.counter("gateway.route.forced", "model", model).increment();
     }
 
+    public void ledgerWritten(int rows, long batchMillis) {
+        registry.counter("gateway.ledger.written", "outcome", "inserted").increment(rows);
+        registry.timer("gateway.ledger.batch.millis").record(batchMillis, TimeUnit.MILLISECONDS);
+    }
+
+    /** The queue was full: the entry went to the spill file rather than being silently dropped. */
+    public void ledgerSpilled(String reason, int rows) {
+        registry.counter("gateway.ledger.spilled", "reason", reason).increment(rows);
+    }
+
+    public void ledgerWriteFailed() {
+        registry.counter("gateway.ledger.write_failed").increment();
+    }
+
+    public void ledgerReplayed(int rows) {
+        registry.counter("gateway.ledger.replayed").increment(rows);
+    }
+
+    public void ledgerLost(int rows) {
+        registry.counter("gateway.ledger.lost").increment(rows);
+    }
+
     private void count(String name, String tenant, String model, long amount) {
         registry.counter(name, "tenant", tenant, "model", model).increment(amount);
     }

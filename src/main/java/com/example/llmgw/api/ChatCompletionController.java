@@ -2,6 +2,8 @@ package com.example.llmgw.api;
 
 import com.example.llmgw.auth.ApiKeyAuthFilter;
 import com.example.llmgw.auth.Tenant;
+import com.example.llmgw.billing.LedgerEntry;
+import com.example.llmgw.billing.UsageLedgerWriter;
 import com.example.llmgw.cache.CachedResponse;
 import com.example.llmgw.cache.CachedResponseCodec;
 import com.example.llmgw.cache.CacheKeyFactory;
@@ -32,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,6 +47,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 @RestController
@@ -61,12 +65,13 @@ public class ChatCompletionController {
     private final ResponseCache cache;
     private final CacheKeyFactory cacheKeys;
     private final CachedResponseCodec cacheCodec;
+    private final UsageLedgerWriter ledger;
 
     public ChatCompletionController(ModelRouter router, UpstreamRegistry adapters, GatewayMetrics metrics,
                                    ObjectMapper mapper, GatewayProperties properties,
                                    ExecutorService streamWorkers, ScheduledExecutorService heartbeats,
                                    QuotaService quota, ResponseCache cache, CacheKeyFactory cacheKeys,
-                                   CachedResponseCodec cacheCodec) {
+                                   CachedResponseCodec cacheCodec, UsageLedgerWriter ledger) {
         this.router = router;
         this.adapters = adapters;
         this.metrics = metrics;
@@ -78,6 +83,7 @@ public class ChatCompletionController {
         this.cache = cache;
         this.cacheKeys = cacheKeys;
         this.cacheCodec = cacheCodec;
+        this.ledger = ledger;
     }
 
     @PostMapping("/chat/completions")
@@ -97,16 +103,21 @@ public class ChatCompletionController {
 
         QuotaReservation reservation = quota.admit(tenant, request, requestId, hit.isPresent());
         if (hit.isPresent()) {
-            metrics.cacheSaved(tenant.id(), request.model(), hit.get().usage());
+            CachedResponse cached = hit.get();
+            metrics.cacheSaved(tenant.id(), request.model(), cached.usage());
             quota.release(reservation);
             servletResponse.setHeader("X-Cache", "HIT");
+            // A cache hit is still booked: zero cost with zero record is indistinguishable from no traffic.
+            ledger.record(new LedgerEntry(requestId, tenant.id(), request.model(), "cache", "cached",
+                    cached.usage().promptTokens(), cached.usage().completionTokens(), 0,
+                    0, null, true, Instant.now()));
             if (request.stream()) {
-                return replay(tenant, requestId, hit.get(), reservation);
+                return replay(tenant, requestId, cached, reservation);
             }
             return ResponseEntity.ok()
                     .header("X-Request-Id", requestId)
                     .header("X-Upstream", "cache")
-                    .body(cacheCodec.toCompletionJson(hit.get()));
+                    .body(cacheCodec.toCompletionJson(cached));
         }
 
         if (request.stream()) {
@@ -120,6 +131,10 @@ public class ChatCompletionController {
         } catch (RuntimeException e) {
             quota.settleUnreconciled(reservation);
             quota.release(reservation);
+            // Book the attempt even though nothing billable was produced, so request counts in the
+            // ledger and in the metrics agree.
+            ledger.record(new LedgerEntry(requestId, tenant.id(), request.model(), "none", "failed",
+                    0, 0, 0, 0, null, false, Instant.now()));
             throw e;
         }
     }
@@ -163,6 +178,10 @@ public class ChatCompletionController {
                 metrics.tokens(tenant.id(), request.model(), result.usage());
                 router.recordSuccess(target, result.upstreamMillis());
                 quota.settle(reservation, result.usage());
+                long latencyMillis = millisSince(startedAt);
+                ledger.record(new LedgerEntry(requestId, tenant.id(), request.model(), target.name(), "success",
+                        result.usage().promptTokens(), result.usage().completionTokens(),
+                        micros(target.costOf(result.usage())), latencyMillis, null, false, Instant.now()));
                 if (cacheKey.isPresent()) {
                     cacheCodec.fromVendor(result.body(), request.model(), result.upstreamMillis())
                             .ifPresent(value -> cache.put(cacheKey.get(), value));
@@ -275,6 +294,7 @@ public class ChatCompletionController {
                 }
                 AtomicBoolean emittedToClient = new AtomicBoolean();
                 AtomicInteger forwardedChars = new AtomicInteger();
+                AtomicLong ttftMillis = new AtomicLong(-1);
                 AtomicReference<Usage> reportedUsage = new AtomicReference<>(Usage.ZERO);
                 AtomicReference<String> reportedFinish = new AtomicReference<>();
                 StringBuilder forCache = cacheKey.isPresent() ? new StringBuilder() : null;
@@ -282,7 +302,9 @@ public class ChatCompletionController {
                     adapters.require(target.vendor()).stream(target, raw, new StreamCallback() {
                         @Override
                         public void onFirstToken() {
-                            metrics.timeToFirstToken(tenant.id(), target.name(), millisSince(startedAt));
+                            long millis = millisSince(startedAt);
+                            ttftMillis.set(millis);
+                            metrics.timeToFirstToken(tenant.id(), target.name(), millis);
                         }
 
                         @Override
@@ -311,6 +333,11 @@ public class ChatCompletionController {
                     metrics.tokens(tenant.id(), request.model(), reportedUsage.get());
                     router.recordSuccess(target, elapsed);
                     quota.settle(reservation, reportedUsage.get());
+                    Usage usage = reportedUsage.get();
+                    ledger.record(new LedgerEntry(requestId, tenant.id(), request.model(), target.name(),
+                            "success", usage.promptTokens(), usage.completionTokens(),
+                            micros(target.costOf(usage)), elapsed, ttftMillis.get() < 0 ? null : ttftMillis.get(),
+                            false, Instant.now()));
                     // Only a stream that ran to its end is worth caching; an abandoned one would freeze
                     // a partial answer under the key for the whole TTL.
                     if (forCache != null) {
@@ -328,8 +355,13 @@ public class ChatCompletionController {
                     metrics.abandonedStream(target.name(), "downstream_closed");
                     // No usage report ever arrived, but the characters already forwarded are the best
                     // available proxy: releasing the whole reservation would make abandonment free.
-                    quota.settle(reservation, Usage.of((int) reservation.estimatedPromptTokens(),
-                            forwardedChars.get() / 4));
+                    Usage inferred = Usage.of((int) reservation.estimatedPromptTokens(),
+                            forwardedChars.get() / 4);
+                    quota.settle(reservation, inferred);
+                    ledger.record(new LedgerEntry(requestId, tenant.id(), request.model(), target.name(),
+                            "abandoned", inferred.promptTokens(), inferred.completionTokens(),
+                            micros(target.costOf(inferred)), millisSince(startedAt),
+                            ttftMillis.get() < 0 ? null : ttftMillis.get(), false, Instant.now()));
                     writer.completeQuietly();
                     return;
                 } catch (UpstreamException e) {
@@ -340,6 +372,15 @@ public class ChatCompletionController {
                         metrics.attempt(tenant.id(), request.model(), target.name(), "error");
                         writeQuietly(writer, errorChunk(summarize(e)));
                         quota.settleUnreconciled(reservation);
+                        // Text that reached the client was generated, and generated means billed, even
+                        // though no usage report arrived to price it exactly.
+                        Usage inferred = midGeneration
+                                ? Usage.of((int) reservation.estimatedPromptTokens(), forwardedChars.get() / 4)
+                                : Usage.ZERO;
+                        ledger.record(new LedgerEntry(requestId, tenant.id(), request.model(), target.name(),
+                                "error", inferred.promptTokens(), inferred.completionTokens(),
+                                micros(target.costOf(inferred)), millisSince(startedAt),
+                                ttftMillis.get() < 0 ? null : ttftMillis.get(), false, Instant.now()));
                         writer.completeQuietly();
                         return;
                     }
@@ -420,6 +461,11 @@ public class ChatCompletionController {
 
     private static long millisSince(long startedAtNanos) {
         return (System.nanoTime() - startedAtNanos) / 1_000_000;
+    }
+
+    /** Money leaves the request path as whole micro-units; see schema.sql. */
+    private static long micros(double amount) {
+        return Math.round(amount * 1_000_000);
     }
 
     private static String summarize(UpstreamException e) {
