@@ -87,6 +87,23 @@ class LedgerStoreTest {
         assertThat(store.spendByTenant().get("t2").get("requests")).isEqualTo(1L);
     }
 
+    /** The reconciliation scope that keeps the equations meaningful across restarts. */
+    @Test
+    void outcomeQueryCanBeScopedToATimestamp() {
+        LedgerEntry old = new LedgerEntry("old-1", "t1", "gw-demo", "mock-primary", "success",
+                10, 5, 100, 10, 5L, false, Instant.parse("2026-01-01T00:00:00Z"));
+        LedgerEntry recent = new LedgerEntry("new-1", "t1", "gw-demo", "mock-primary", "success",
+                1, 1, 1, 10, 5L, false, Instant.parse("2026-10-06T00:00:00Z"));
+        store.insertLedger(List.of(old, recent));
+
+        assertThat(store.rowsByOutcome()).hasSize(1);
+        assertThat(store.rowsByOutcome().get("success").get("tokens")).isEqualTo(17L);
+
+        var scoped = store.rowsByOutcomeSince(Instant.parse("2026-06-01T00:00:00Z"));
+        assertThat(scoped.get("success").get("rows")).isEqualTo(1L);
+        assertThat(scoped.get("success").get("tokens")).isEqualTo(2L);
+    }
+
     @Test
     void cachedExchangesAreBookedAtZeroCost() {
         LedgerEntry cached = new LedgerEntry("c1", "t1", "gw-demo", "cache", "cached",

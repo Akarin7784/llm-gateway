@@ -121,19 +121,35 @@ public class LedgerStore {
 
     /** Rows grouped by outcome: the reconciliation compares each category against its own counter. */
     public Map<String, Map<String, Object>> rowsByOutcome() {
+        return rowsByOutcomeSince(null);
+    }
+
+    /**
+     * The metrics side of reconciliation lives in this process and restarts with it, while the ledger
+     * does not. Comparing an absolute ledger against a per-process counter would report a permanent
+     * phantom delta after every restart, so the equations are scoped to rows this process actually
+     * wrote. Time is the natural bound because the ledger rows carry their own created_at.
+     */
+    public Map<String, Map<String, Object>> rowsByOutcomeSince(java.time.Instant since) {
         Map<String, Map<String, Object>> view = new LinkedHashMap<>();
-        jdbc.query("""
+        String sql = """
                 SELECT outcome, COUNT(*) AS rows_count, SUM(prompt_tokens + completion_tokens) AS tokens,
                        SUM(cost_micros) AS cost_micros, SUM(latency_ms) AS latency_ms
-                FROM usage_ledger GROUP BY outcome""",
-                rs -> {
-                    Map<String, Object> row = new LinkedHashMap<>();
-                    row.put("rows", rs.getLong("rows_count"));
-                    row.put("tokens", rs.getLong("tokens"));
-                    row.put("cost_micros", rs.getLong("cost_micros"));
-                    row.put("latency_ms_total", rs.getLong("latency_ms"));
-                    view.put(rs.getString("outcome"), row);
-                });
+                FROM usage_ledger %s GROUP BY outcome"""
+                .formatted(since == null ? "" : "WHERE created_at >= ?");
+        org.springframework.jdbc.core.RowCallbackHandler callback = rs -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("rows", rs.getLong("rows_count"));
+            row.put("tokens", rs.getLong("tokens"));
+            row.put("cost_micros", rs.getLong("cost_micros"));
+            row.put("latency_ms_total", rs.getLong("latency_ms"));
+            view.put(rs.getString("outcome"), row);
+        };
+        if (since == null) {
+            jdbc.query(sql, callback);
+        } else {
+            jdbc.query(sql, callback, java.sql.Timestamp.from(since));
+        }
         return view;
     }
 

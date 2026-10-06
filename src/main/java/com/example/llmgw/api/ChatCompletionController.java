@@ -110,6 +110,9 @@ public class ChatCompletionController {
         if (hit.isPresent()) {
             CachedResponse cached = hit.get();
             metrics.cacheSaved(tenant.id(), request.model(), cached.usage());
+            // Counted as an outcome so the result distribution adds up to all traffic: a dashboard that
+            // only shows vendor calls makes the cache look like it serves nobody.
+            metrics.attempt(tenant.id(), request.model(), "cache", "cached");
             quota.release(reservation);
             servletResponse.setHeader("X-Cache", "HIT");
             // A cache hit is still booked: zero cost with zero record is indistinguishable from no traffic.

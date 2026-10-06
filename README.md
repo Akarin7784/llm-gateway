@@ -5,7 +5,8 @@
 一个不需要真实 API key、不需要 Docker、不需要 Redis 就能完整跑起来并复现全部数据的实现。
 
 - Java 21（虚拟线程）+ Spring Boot 3.3
-- 73 个单元测试；下面每一张表都能用仓库里的脚本重跑出来
+- 74 个单元测试；下面每一张表都能用仓库里的脚本重跑出来
+- 网关自带运维面板（`http://localhost:8080/`），单文件零前端依赖，读的就是 /actuator/prometheus——不另造一套会和指标漂移的统计接口
 
 ---
 
@@ -36,6 +37,8 @@ Client
 | `billing` | 流水落库（异步批量 + 幂等 + 溢出落盘 + 启动回放）、对账视图 |
 | `obs` | Micrometer 指标：TTFT、端到端/上游延迟、放弃流、降级、配额拒绝维度 |
 | `mock` | 故障注入上游模拟器（延迟 / 错误率 / 沉默 / 活跃流计数） |
+| `bench` | 闭环负载生成器（每请求一个虚拟线程，分位数与吞吐报告） |
+| `static/index.html` | 运维面板，读上面那些端点，零前端依赖 |
 
 `mock` 用 JDK 内置 `com.sun.net.httpserver` 实现，不依赖框架——否则无法在不烧 token 的前提下重复压测和做混沌测试。
 
@@ -65,6 +68,23 @@ curl -s localhost:8080/v1/chat/completions \
 
 bash tools/dev-down.sh
 ```
+
+## 运维面板
+
+<http://localhost:8080/> —— 单文件 `src/main/resources/static/index.html`，无框架、无构建步骤，直接解析 `/actuator/prometheus` 的文本格式，再叠 `/v1/routing` 与 `/v1/billing/*`。
+
+刻意不做的事是**另造一个"统计 API"**：面板和 Grafana 读同一份指标。否则两份数字会各自漂移，而计费系统里最难查的 bug 恰恰是"两个地方说的数不一样"。
+
+面板上的数字彼此可校验。一轮真实流量后的实测：
+
+```
+预扣 1,548 − 回补 1,500 = 48 = executed_tokens（流水 success 行的 token 和）
+cached_tokens 32         = 缓存节省 token 32
+累计请求 5               = cached 2 + success 3 = 已写流水 5
+rows 25,053             = distinct request_id 25,053   （无重复计费）
+```
+
+分位数由 histogram 桶线性插值得来，**桶粒度决定了它的精度**，面板把这句话写在数字下面而不是假装精确；从未触发过的计数器显示 `—` 而不是 `0`——"没发生过"和"发生了零次"在排障时是完全不同的信息。
 
 ## 实测结果
 
@@ -195,7 +215,7 @@ cached_tokens     ledger=45   counters=45   delta=0     （命中省下的，不
 ## 测试
 
 ```bash
-mvn test    # 73 个
+mvn test    # 74 个
 ```
 
 覆盖：令牌桶算术（含内存实现与 Lua 实现的共同规范）、并发取令牌不超发、租约过期回收、估算器向上取整、配额预扣/回补/超发不追认、缓存键规范化与租户隔离、缓存编解码的截断拒绝、健康窗口滑出与陈旧轮次、熔断四态迁移、打分排序与权重翻转、流水 SQL 的幂等与日累计（对真实 H2 而非 mock）、溢出落盘与启动回放、关闭时排空。

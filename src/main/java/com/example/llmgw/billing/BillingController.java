@@ -27,6 +27,7 @@ public class BillingController {
 
     private final LedgerStore store;
     private final MeterRegistry registry;
+    private final java.time.Instant processStart = java.time.Instant.now();
 
     public BillingController(LedgerStore store, MeterRegistry registry) {
         this.store = store;
@@ -47,12 +48,18 @@ public class BillingController {
 
     @GetMapping("/reconcile")
     public Map<String, Object> reconcile() {
-        Map<String, Map<String, Object>> byOutcome = store.rowsByOutcome();
+        // Every figure below is scoped to this process so the equations survive restarts: the ledger is
+        // durable, the counters are not.
+        Map<String, Map<String, Object>> byOutcome = store.rowsByOutcomeSince(processStart);
+        long ledgerRowsThisProcess = byOutcome.values().stream()
+                .mapToLong(row -> ((Number) row.get("rows")).longValue())
+                .sum();
 
         long ledgerExecuted = outcomeTokens(byOutcome, "success");
         long ledgerCached = outcomeTokens(byOutcome, "cached");
         long countedExecuted = counterValue("gateway.tokens.prompt") + counterValue("gateway.tokens.completion");
         long countedSaved = counterValue("gateway.cache.saved.tokens");
+        long rowsTheWriterReports = counterValue("gateway.ledger.written") + counterValue("gateway.ledger.replayed");
 
         Map<String, Object> equations = new LinkedHashMap<>();
         equations.put("executed_tokens", Map.of(
@@ -63,6 +70,12 @@ public class BillingController {
                 "ledger", ledgerCached,
                 "counters", countedSaved,
                 "delta", ledgerCached - countedSaved));
+        // Only closes when the write queue has drained; queue_depth is reported right below it so a
+        // transient difference cannot be mistaken for a lost row.
+        equations.put("rows_this_process", Map.of(
+                "ledger", ledgerRowsThisProcess,
+                "counters", rowsTheWriterReports,
+                "delta", ledgerRowsThisProcess - rowsTheWriterReports));
 
         Map<String, Object> inferred = new LinkedHashMap<>();
         inferred.put("abandoned_tokens", outcomeTokens(byOutcome, "abandoned"));
@@ -77,9 +90,8 @@ public class BillingController {
         durability.put("written_rows", counterValue("gateway.ledger.written"));
 
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("scope", "counters live in this process and reset on restart; the ledger is durable. "
-                + "A non-zero delta right after a restart means the ledger holds traffic from a previous "
-                + "process, not a lost or duplicated row.");
+        result.put("scope", "equations cover rows written since this process started at " + processStart
+                + "; the ledger itself is durable and holds earlier processes' traffic.");
         result.put("equations", equations);
         result.put("inferred_pricing", inferred);
         result.put("durability", durability);

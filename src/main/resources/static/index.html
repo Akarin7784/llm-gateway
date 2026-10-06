@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM Gateway 运维面板</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --line: #21262d; --text: #c9d1d9;
+    --dim: #8b949e; --ok: #3fb950; --warn: #d29922; --bad: #f85149; --accent: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+    padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  h1 { font-size: 15px; margin: 0 12px 0 0; font-weight: 600; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim);
+    margin: 0 0 10px; font-weight: 600; }
+  input, select { background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 8px; font: 12px ui-monospace, Consolas, monospace; }
+  input[type=password] { width: 220px; }
+  main { padding: 18px 20px 40px; }
+  section { margin-bottom: 26px; }
+  .grid { display: grid; gap: 12px; }
+  .cards { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .card .label { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  .card .value { font: 600 24px ui-monospace, Consolas, monospace; margin-top: 4px; }
+  .card .sub { font-size: 11px; color: var(--dim); margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  td.num, th.num { text-align: right; font-family: ui-monospace, Consolas, monospace; }
+  .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px;
+    font-weight: 600; border: 1px solid; }
+  .ok { color: var(--ok); border-color: #23803a; background: #12261a; }
+  .warn { color: var(--warn); border-color: #8a6a12; background: #2a2110; }
+  .bad { color: var(--bad); border-color: #9b2c2a; background: #2d1616; }
+  .neutral { color: var(--dim); border-color: var(--line); background: #12171d; }
+  .split { color: var(--accent); }
+  canvas { width: 100%; height: 46px; display: block; }
+  .note { font-size: 11px; color: var(--dim); margin-top: 8px; }
+  .two { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+  .missing { color: #4d565f; }
+  #status { font-size: 12px; color: var(--dim); margin-left: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>LLM Gateway 运维面板</h1>
+  <label>API Key <input id="token" type="password" value="sk-alpha-dev" spellcheck="false"></label>
+  <label>刷新
+    <select id="interval">
+      <option value="0">关闭</option>
+      <option value="1000">1s</option>
+      <option value="2000" selected>2s</option>
+      <option value="5000">5s</option>
+    </select>
+  </label>
+  <button id="refresh" type="button">立即刷新</button>
+  <span id="status">未连接</span>
+</header>
+
+<main>
+  <section>
+    <h2>实时</h2>
+    <div class="grid cards" id="live"></div>
+    <div class="card" style="margin-top:12px">
+      <div class="label">吞吐（requests/s，由累计计数器差分得到）</div>
+      <canvas id="spark" width="1200" height="46"></canvas>
+      <div class="note">面板读的是网关自己的 <code>gateway_requests_total</code>，每个数字都可在 /actuator/prometheus 核对。</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>延迟分解</h2>
+    <div class="grid cards" id="latency"></div>
+    <div class="note">三段互不重叠：<b>admission</b> = servlet 入口到控制器；<b>网关内部</b> = 端到端减去上游一跳；<b>上游</b> = 真正打到厂商的时间。
+      把 TTFT 退化归因到"是不是网关代码慢"必须靠这个拆分，而不是猜。</div>
+  </section>
+
+  <section>
+    <h2>上游与熔断</h2>
+    <div class="card"><table id="upstreams"></table></div>
+  </section>
+
+  <section class="grid two">
+    <div>
+      <h2>结果与拒绝分布</h2>
+      <div class="card"><table id="outcomes"></table></div>
+    </div>
+    <div>
+      <h2>缓存与配额</h2>
+      <div class="card"><table id="counters"></table></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>花费（/v1/billing/summary）</h2>
+    <div class="card"><table id="spend"></table></div>
+    <div class="note">cost 为<b>整数微单位</b>累加，不做浮点求和；换算系数取决于 model_catalog 的每千 token 定价。</div>
+  </section>
+
+  <section>
+    <h2>对账（/v1/billing/reconcile）</h2>
+    <div class="card"><table id="reconcile"></table></div>
+    <div class="note" id="reconcile-note"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+const state = { history: [], lastTotal: null, lastAt: null, timer: null };
+
+const el = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+function fmt(n) {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  if (Math.abs(n) >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  return String(Math.round(n * 100) / 100);
+}
+const ms = n => n === null || n === undefined ? "—" : fmt(n) + " ms";
+const pct = n => n === null || n === undefined ? "—" : (n * 100).toFixed(1) + "%";
+
+/** Missing series are rendered as an em dash: a counter that never fired is not the same as a zero. */
+function card(label, value, sub, tone) {
+  return `<div class="card"><div class="label">${label}</div>`
+       + `<div class="value${tone ? " " + tone : ""}">${value}</div>`
+       + `<div class="sub">${sub || ""}</div></div>`;
+}
+
+/**
+ * Prometheus exposition parser, deliberately tiny: the gateway already exposes text format and
+ * pulling it here avoids inventing a second, drifting "stats API" that would disagree with the
+ * metrics every Grafana panel reads.
+ */
+function parsePrometheus(text) {
+  const series = [];
+  for (const line of text.split("\n")) {
+    if (!line || line.startsWith("#")) continue;
+    const split = line.lastIndexOf(" ");
+    const key = line.slice(0, split);
+    const value = Number(line.slice(split + 1));
+    const brace = key.indexOf("{");
+    const name = brace < 0 ? key : key.slice(0, brace);
+    const labels = {};
+    if (brace >= 0) {
+      // Real label tokenizer: splitting on "," breaks as soon as a value contains a comma, and every
+      // grouped figure on this page would then be filed under a truncated key.
+      const pattern = /([A-Za-z_][A-Za-z0-9_]*)="((?:[^"\\]|\\.)*)"/g;
+      let match;
+      while ((match = pattern.exec(key.slice(brace + 1))) !== null) {
+        labels[match[1]] = match[2].replace(/\\"/g, '"').replace(/\\n/g, "\n");
+      }
+    }
+    series.push({ name, labels, value });
+  }
+  return {
+    series,
+    sum: n => series.filter(s => s.name === n).reduce((a, s) => a + s.value, 0),
+    first: n => (series.find(s => s.name === n) || {}).value ?? null,
+    max: n => series.filter(s => s.name === n).reduce((a, s) => Math.max(a, s.value), -Infinity),
+    byLabels: n => series.filter(s => s.name === n),
+  };
+}
+
+/** Percentile from histogram buckets, merging every tag set into one distribution. */
+function bucketPercentile(metrics, name, quantile) {
+  const buckets = metrics.byLabels(name + "_bucket");
+  if (!buckets.length) return null;
+  const bounds = new Map();
+  for (const b of buckets) {
+    const le = b.labels.le;
+    const key = le === "+Inf" ? Infinity : Number(le);
+    bounds.set(key, (bounds.get(key) || 0) + b.value);
+  }
+  const sorted = [...bounds.entries()].sort((a, b) => a[0] - b[0]);
+  const total = sorted.length ? sorted[sorted.length - 1][1] : 0;
+  if (!total) return null;
+  const target = quantile * total;
+  let previousBound = 0, previousCount = 0;
+  for (const [bound, count] of sorted) {
+    if (count >= target) {
+      if (!isFinite(bound)) return previousBound;
+      // Linear interpolation inside the bucket: the honest limit of what buckets can tell you.
+      const share = (target - previousCount) / Math.max(1, count - previousCount);
+      return (previousBound + share * (bound - previousBound)) * 1000;
+    }
+    previousBound = bound;
+    previousCount = count;
+  }
+  return null;
+}
+
+function chip(text, tone) { return `<span class="chip ${tone}">${text}</span>`; }
+
+function stateTone(state) {
+  return state === "CLOSED" ? "ok" : state === "HALF_OPEN" ? "warn" : "bad";
+}
+
+async function fetchText(url, headers) {
+  const response = await fetch(url, { headers });
+  if (!response.ok) throw new Error(`${url} -> ${response.status}`);
+  return response.text();
+}
+
+function renderLive(metrics, rate) {
+  const active = metrics.first("gateway_streams_active");
+  const hitRatio = metrics.first("gateway_cache_hit_ratio");
+  const entries = metrics.first("gateway_cache_entries");
+  const requests = metrics.sum("gateway_requests_total");
+  const ttftMean = (() => {
+    const sum = metrics.sum("gateway_ttft_millis_sum");
+    const count = metrics.sum("gateway_ttft_millis_count");
+    return count ? sum / count : null;
+  })();
+  const queue = metrics.first("gateway_ledger_queue_depth");
+
+  el("live").innerHTML = [
+    card("在传流数", fmt(active), "网关自己计数，不是数 socket", active > 0 ? "split" : ""),
+    card("TTFT 均值", ms(ttftMean), "控制器开工 → 收到厂商首 token"),
+    card("吞吐", rate === null ? "—" : fmt(rate) + " rps", `累计请求 ${fmt(requests)}`),
+    card("缓存命中率", pct(hitRatio), `条目 ${fmt(entries)}`),
+    card("流水队列积压", fmt(queue), "满则落盘，不丢行"),
+    card("已写流水", fmt(metrics.sum("gateway_ledger_written_total")), "批量 INSERT IGNORE"),
+  ].join("");
+}
+
+function renderLatency(metrics) {
+  const admissionSum = metrics.sum("gateway_admission_millis_sum");
+  const admissionCount = metrics.sum("gateway_admission_millis_count");
+  const e2eSum = metrics.sum("gateway_e2e_millis_seconds_sum");
+  const e2eCount = metrics.sum("gateway_e2e_millis_seconds_count");
+  const upSum = metrics.sum("gateway_upstream_millis_seconds_sum");
+  const upCount = metrics.sum("gateway_upstream_millis_seconds_count");
+  const inside = e2eCount && upCount ? (e2eSum / e2eCount - upSum / upCount) * 1000 : null;
+
+  el("latency").innerHTML = [
+    card("admission 均值", admissionCount ? ms(admissionSum / admissionCount / 1e6) : "—",
+      "servlet 入口 → 控制器；高并发下 TTFT 是否卡在排队看这里"),
+    card("端到端 p50 / p99",
+      `${fmt(bucketPercentile(metrics, "gateway_e2e_millis_seconds", 0.5))} / ${fmt(bucketPercentile(metrics, "gateway_e2e_millis_seconds", 0.99))} ms`,
+      "由 histogram 桶插值，桶粒度决定了它的精度"),
+    card("上游一跳均值", upCount ? ms(upSum / upCount * 1000) : "—", "真正打到厂商的时间"),
+    card("网关自身开销", inside === null ? "—" : ms(inside), "端到端均值 − 上游均值"),
+  ].join("");
+}
+
+function renderUpstreams(routing, metrics) {
+  const transitions = metrics.byLabels("gateway_circuit_transition_total");
+  const count = (from, to, upstream) => transitions
+    .filter(s => s.labels.from === from && s.labels.to === to && s.labels.upstream === upstream)
+    .reduce((a, s) => a + s.value, 0);
+
+  const rows = Object.entries(routing || {}).map(([name, info]) => {
+    const opened = count("CLOSED", "OPEN", name) + count("HALF_OPEN", "OPEN", name);
+    const recovered = count("HALF_OPEN", "CLOSED", name);
+    return `<tr><td>${esc(name)}</td>`
+      + `<td>${chip(info.state, stateTone(info.state))}</td>`
+      + `<td class="num">${pct(info.error_rate)}</td>`
+      + `<td class="num">${fmt(info.mean_latency_ms)} ms</td>`
+      + `<td class="num">${fmt(info.window_requests)}</td>`
+      + `<td class="num">${opened ? `<span class="bad">${opened}</span>` : '<span class="missing">0</span>'}</td>`
+      + `<td class="num">${recovered ? `<span class="ok">${recovered}</span>` : '<span class="missing">0</span>'}</td></tr>`;
+  }).join("");
+
+  el("upstreams").innerHTML = `<thead><tr><th>上游</th><th>熔断状态</th><th class="num">窗口错误率</th>
+    <th class="num">平均延迟</th><th class="num">窗口请求</th><th class="num">跳闸次数</th>
+    <th class="num">恢复次数</th></tr></thead><tbody>${rows || '<tr><td colspan="7">无数据</td></tr>'}</tbody>`;
+}
+
+function renderOutcomes(metrics) {
+  const group = (name, labelKey) => {
+    const map = new Map();
+    for (const s of metrics.byLabels(name)) {
+      const key = s.labels[labelKey] || "—";
+      map.set(key, (map.get(key) || 0) + s.value);
+    }
+    return map;
+  };
+  const outcomes = group("gateway_requests_total", "outcome");
+  const rejected = group("gateway_quota_rejected_total", "dimension");
+  const abandoned = group("gateway_stream_abandoned_total", "stage");
+  const degraded = group("gateway_degradation_total", "from");
+
+  const rows = [];
+  const toneFor = k => k === "success" ? "ok" : k === "error" || k === "abandoned" ? "bad"
+    : k === "degraded" || k === "cached" ? "warn" : "neutral";
+  for (const [k, v] of outcomes) rows.push(`<tr><td>结果</td><td>${chip(k, toneFor(k))}</td><td class="num">${fmt(v)}</td></tr>`);
+  for (const [k, v] of rejected) rows.push(`<tr><td>配额拒绝</td><td>${chip(k, "warn")}</td><td class="num">${fmt(v)}</td></tr>`);
+  for (const [k, v] of abandoned) rows.push(`<tr><td>放弃流</td><td>${chip(k, "bad")}</td><td class="num">${fmt(v)}</td></tr>`);
+  for (const [k, v] of degraded) rows.push(`<tr><td>降级自</td><td>${chip(k, "neutral")}</td><td class="num">${fmt(v)}</td></tr>`);
+
+  el("outcomes").innerHTML = `<thead><tr><th>维度</th><th></th><th class="num">计数</th></tr></thead><tbody>`
+    + (rows.join("") || '<tr><td colspan="3" class="missing">尚无流量</td></tr>') + `</tbody>`;
+
+  const kv = [
+    // Summed over outcome="hit" only: adding every lookup would label misses as hits and quietly
+    // inflate the one number people use to judge whether the cache is earning its keep.
+    ["缓存命中查询", metrics.byLabels("gateway_cache_lookup_total")
+      .filter(s => s.labels.outcome === "hit").reduce((a, s) => a + s.value, 0), ""],
+    ["预扣 token", metrics.sum("gateway_quota_reserved_tokens_total"), ""],
+    ["回补 token", metrics.sum("gateway_quota_refunded_tokens_total"), ""],
+    ["超发 token", metrics.sum("gateway_quota_overage_tokens_total"), ""],
+    ["未核销 token", metrics.sum("gateway_quota_unreconciled_tokens_total"), ""],
+    ["节省 token（缓存）", metrics.sum("gateway_cache_saved_tokens_total"), ""],
+    ["降级路由", metrics.sum("gateway_route_forced_total"), ""],
+    ["配额后端退化", metrics.sum("gateway_quota_backend_degraded_total"), ""],
+  ];
+  el("counters").innerHTML = `<thead><tr><th>计数</th><th class="num">值</th></tr></thead><tbody>`
+    + kv.map(([label, value]) => `<tr><td>${label}</td><td class="num${value ? "" : " missing"}">${fmt(value)}</td></tr>`).join("")
+    + `</tbody>`;
+}
+
+function renderSpend(summary) {
+  const tenants = Object.entries(summary.all_tenants || {});
+  const outcomes = Object.entries(summary.by_outcome || {});
+  const rows = tenants.map(([tenant, v]) => `<tr><td>${esc(tenant)}</td>`
+    + `<td class="num">${fmt(v.requests)}</td>`
+    + `<td class="num">${fmt(v.prompt_tokens)}</td>`
+    + `<td class="num">${fmt(v.completion_tokens)}</td>`
+    + `<td class="num">${fmt(v.cached_requests)}</td>`
+    + `<td class="num">${fmt(v.cost_micros)}</td></tr>`).join("");
+  const outcomeRows = outcomes.map(([outcome, v]) => `<tr><td>${chip(outcome, "neutral")}</td>`
+    + `<td class="num">${fmt(v.rows)}</td><td class="num">${fmt(v.tokens)}</td>`
+    + `<td class="num">${fmt(v.cost_micros)}</td></tr>`).join("");
+
+  el("spend").innerHTML = `<thead><tr><th>租户</th><th class="num">请求</th><th class="num">prompt</th>
+    <th class="num">completion</th><th class="num">命中缓存</th><th class="num">花费 µ</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="6" class="missing">尚无流水</td></tr>'}</tbody>
+    <thead><tr><th>按结果</th><th class="num">行数</th><th class="num">token</th><th class="num">花费 µ</th></tr></thead>
+    <tbody>${outcomeRows}</tbody>`;
+}
+
+function renderReconcile(reconcile) {
+  const equations = Object.entries(reconcile.equations || {}).map(([name, eq]) => {
+    const zero = eq.delta === 0;
+    return `<tr><td>${esc(name)}</td><td class="num">${fmt(eq.ledger)}</td>`
+      + `<td class="num">${fmt(eq.counters)}</td>`
+      + `<td class="num">${chip(zero ? "delta 0" : "delta " + fmt(eq.delta), zero ? "ok" : "bad")}</td></tr>`;
+  }).join("");
+  const durability = Object.entries(reconcile.durability || {}).map(([k, v]) =>
+    `<tr><td>${esc(k)}</td><td class="num${v ? "" : " missing"}">${fmt(typeof v === "number" ? v : Number(v))}</td></tr>`).join("");
+  const integrity = reconcile.integrity || {};
+  const matched = integrity.rows === integrity.distinct_request_ids;
+
+  el("reconcile").innerHTML = `<thead><tr><th>等式</th><th class="num">流水</th><th class="num">指标</th><th></th></tr></thead>
+    <tbody>${equations || '<tr><td colspan="4" class="missing">尚无流量</td></tr>'}</tbody>
+    <thead><tr><th>持久化</th><th class="num">值</th><th colspan="2"></th></tr></thead><tbody>${durability}</tbody>
+    <thead><tr><th>完整性</th><th class="num">值</th><th colspan="2"></th></tr></thead>
+    <tbody><tr><td>rows / distinct request_id</td><td class="num">${fmt(integrity.rows)} / ${fmt(integrity.distinct_request_ids)}</td>
+    <td colspan="2">${chip(matched ? "无重复计费" : "存在重复", matched ? "ok" : "bad")}</td></tr></tbody>`;
+
+  const inferred = reconcile.inferred_pricing || {};
+  el("reconcile-note").textContent =
+    `推断计价单列不参与等式：abandoned=${fmt(inferred.abandoned_tokens)} token，error=${fmt(inferred.error_tokens)} token。`
+    + (reconcile.scope || "");
+}
+
+function drawSpark(rate) {
+  const canvas = el("spark");
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  if (state.history.length < 2) return;
+  const max = Math.max(...state.history, 1);
+  ctx.beginPath();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "#58a6ff";
+  state.history.forEach((value, i) => {
+    const x = (i / (state.history.length - 1)) * w;
+    const y = h - (value / max) * (h - 6) - 3;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  });
+  ctx.stroke();
+  ctx.fillStyle = "#8b949e";
+  ctx.font = "11px ui-monospace, monospace";
+  ctx.fillText(`峰值 ${fmt(max)} rps · 当前 ${fmt(rate ?? 0)} rps`, 6, 13);
+}
+
+async function refresh() {
+  const headers = { Authorization: "Bearer " + el("token").value.trim() };
+  const startedAt = Date.now();
+  try {
+    const [promText, routing, summary, reconcile] = await Promise.all([
+      fetchText("/actuator/prometheus"),
+      fetchText("/v1/routing", headers).then(JSON.parse).catch(() => ({})),
+      fetchText("/v1/billing/summary", headers).then(JSON.parse).catch(() => ({})),
+      fetchText("/v1/billing/reconcile", headers).then(JSON.parse).catch(() => ({})),
+    ]);
+    const metrics = parsePrometheus(promText);
+
+    const total = metrics.sum("gateway_requests_total");
+    const now = Date.now();
+    let rate = null;
+    if (state.lastTotal !== null && state.lastAt) {
+      const dt = (now - state.lastAt) / 1000;
+      if (dt > 0) {
+        rate = Math.max(0, (total - state.lastTotal) / dt);
+        state.history.push(rate);
+        if (state.history.length > 90) state.history.shift();
+      }
+    }
+    state.lastTotal = total;
+    state.lastAt = now;
+
+    renderLive(metrics, rate);
+    renderLatency(metrics);
+    renderUpstreams(routing, metrics);
+    renderOutcomes(metrics);
+    renderSpend(summary);
+    renderReconcile(reconcile);
+    drawSpark(rate);
+    el("status").textContent = `已更新 · ${new Date().toLocaleTimeString()} · ${Date.now() - startedAt}ms`;
+    el("status").className = "";
+  } catch (e) {
+    el("status").textContent = "读取失败：" + e.message;
+    el("status").className = "bad";
+  }
+}
+
+function schedule() {
+  clearInterval(state.timer);
+  const ms = Number(el("interval").value);
+  if (ms > 0) state.timer = setInterval(refresh, ms);
+}
+
+el("refresh").addEventListener("click", refresh);
+el("interval").addEventListener("change", schedule);
+el("token").addEventListener("change", () => { state.history = []; state.lastTotal = null; refresh(); });
+
+schedule();
+refresh();
+</script>
+</body>
+</html>
