@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * The numbers the gateway is actually judged on: time-to-first-token, the gap between end-to-end and
@@ -16,9 +17,11 @@ import java.util.concurrent.TimeUnit;
 public class GatewayMetrics {
 
     private final MeterRegistry registry;
+    private final AtomicInteger activeStreams = new AtomicInteger();
 
     public GatewayMetrics(MeterRegistry registry) {
         this.registry = registry;
+        registry.gauge("gateway.streams.active", activeStreams, AtomicInteger::get);
     }
 
     public void attempt(String tenant, String model, String upstream, String outcome) {
@@ -28,6 +31,11 @@ public class GatewayMetrics {
 
     public void timeToFirstToken(String tenant, String upstream, long millis) {
         registry.summary("gateway.ttft.millis", "tenant", tenant, "upstream", upstream).record(millis);
+    }
+
+    /** Arrival (servlet filter entry) to controller entry: queueing in front of the gateway's own code. */
+    public void admissionLatency(long millis) {
+        registry.summary("gateway.admission.millis").record(millis);
     }
 
     public void upstreamLatency(String upstream, String model, long millis) {
@@ -99,6 +107,19 @@ public class GatewayMetrics {
 
     public void upstreamProbeResult(String upstream, String outcome) {
         registry.counter("gateway.circuit.probe", "upstream", upstream, "outcome", outcome).increment();
+    }
+
+    /**
+     * Live count of streams the gateway is currently holding open. This is the number a capacity plan
+     * for an LLM gateway turns on, not requests per second: a stream reserves a connection, per-stream
+     * state, and vendor-side compute for five to thirty seconds.
+     */
+    public void streamStarted() {
+        activeStreams.incrementAndGet();
+    }
+
+    public void streamFinished() {
+        activeStreams.decrementAndGet();
     }
 
     public void circuitState(String upstream, String previous, String next) {

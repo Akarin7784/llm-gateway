@@ -4,7 +4,7 @@ server:
     # Long-lived SSE responses hold a connection, not a thread, once virtual threads are on.
     # These bounds are what actually cap concurrent streams, so they are stated rather than defaulted.
     max-connections: 8192
-    accept-count: 400
+    accept-count: 1024
     connection-timeout: 60s
     keep-alive-timeout: 60s
     max-keep-alive-requests: 1000
@@ -143,6 +143,14 @@ gateway:
       rpm: 6000
       tpm: 2000000
       max-concurrency: 4
+    # Load-test tenant: quotas are effectively open, so the numbers describe the forwarding path rather
+    # than the rate limiter. Measuring a throttled gateway measures the throttle.
+    - id: tenant-bench
+      name: Bench
+      api-key: sk-bench-dev
+      rpm: 1000000
+      tpm: 1000000000
+      max-concurrency: 100000
 
 logging:
   level:

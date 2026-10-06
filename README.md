@@ -52,6 +52,13 @@ bash tools/test-billing.sh    # 流水落库与对账等式
 bash tools/test-cancellation.sh
 bash tools/measure-detection.sh 2s   # 断连检测延迟
 
+# 压测（负载生成器需要编译产物在 target/classes）
+CP="target/classes;$(cat tools/cp.txt)"
+java -cp "$CP" com.example.llmgw.bench.LoadGenerator --concurrency 64 --requests 2000        # 非流式
+java -cp "$CP" com.example.llmgw.bench.LoadGenerator --stream true --concurrency 256 --requests 256
+bash tools/bench-stream.sh 50 100          # 长流并发阶梯（经网关）
+DIRECT=1 bash tools/bench-stream.sh 50 100 # 对照组：同样的流直连厂商模拟器
+
 curl -s localhost:8080/v1/chat/completions \
   -H 'Content-Type: application/json' -H 'Authorization: Bearer sk-alpha-dev' \
   -d '{"model":"gw-demo","stream":true,"messages":[{"role":"user","content":"hi"}]}'
@@ -149,6 +156,42 @@ cached_tokens     ledger=45   counters=45   delta=0     （命中省下的，不
 
 金额一律以**整数微单位**存储，不用浮点：累加三万条浮点价格来回答"这个月花了多少"，误差正好落在发生计费争议的地方。
 
+## 压测
+
+压测工具本身是这个仓库的一部分：`bench/LoadGenerator` 用 JDK HttpClient + **每请求一个虚拟线程**写成，不依赖 wrk/k6。理由不是造轮子偏好，而是**测量工具不能是被测对象的一部分**——外部工具的连接模型会挡在数字和网关之间；闭环负载（恰好 N 个在飞）而不是"一次全发"，才描述得出网关在受控供给负载下的行为。
+
+流形态：50 token × 100ms ≈ 每条流持续 5 秒。LLM 网关的容量问题是**同时挂着多少条长响应**，不是每秒能做多少次小请求。
+
+| 并发流 | 直连厂商 TTFT p50 | 经网关 TTFT p50 | 网关净增 | 直连错误 | 经网关错误 |
+|---|---|---|---|---|---|
+| 64 | 22 ms | 87 ms | +65 ms | 0 | 0 |
+| 256 | 59 ms | 347 ms | +288 ms | 0 | 0 |
+| 512 | 175 ms | 586 ms | +411 ms | 51 | 127 |
+| 1024 | 361 ms | 1278 ms | +917 ms | 173 | 350 |
+
+网关自己那部分代码有多贵，是靠内部计时拆出来的，不是猜的：
+
+| 分段 | 512 并发流下的实测 |
+|---|---|
+| admission（servlet 过滤器入口 → 控制器入口） | **均值 5.7 ms**，max 133 ms |
+| 网关内部代码（非流式，端到端减掉上游一跳） | **均值 2.75–3.0 ms** |
+| 网关内部看到的 TTFT（开工 → 收到厂商首 token） | 均值 300 ms |
+| 同一负载直连厂商的 TTFT | 均值 ~185 ms |
+
+### 两个被证伪的假设（这比结论更有价值）
+
+1. **"出站连接被池化串行了"** —— 客户端 TTFT 随并发线性恶化时我最先怀疑这个。实测：64 并发对应 **64 条 ESTABLISHED 出站连接**。假设错误。
+2. **"每 token 两次 JSON 编解码是主因"**（解析厂商 chunk + 重新序列化给客户端）—— 用零改动实验验证：同样 5 秒的流，把 chunk 从 50 降到 5（每 token 工作量少 10 倍），TTFT 从 819ms 只变到 665ms。**不是主因**。
+
+排除这两项之后，客户端 TTFT 与内部 TTFT 之间约 360ms 的缺口落在网关代码之外：厂商模拟器自身在高并发下的退化（直连也一样）+ 三个 JVM 在同一台 16 核机器上争抢。**下一步是 JFR 采样归因，不是继续猜。**
+
+### 数据可信度的边界
+
+- 压测机、网关、厂商模拟器同机运行，高并发下三者互相争抢；正式容量结论需要分机部署。
+- **方差很大**：512 并发流的错误数在不同轮次介于 0 与 127 之间。上面的表取的是最后一轮完整对照，不是挑最好的。
+- 厂商侧是本地模拟器，延迟profile人为可控但并非真实厂商行为。
+- 因此本仓库**不声称**测出了网关的并发上限；能声称的是 256 条 5 秒长流零错误，以及"网关同步代码在毫秒级"这一有内部计时支撑的结论。
+
 ## 测试
 
 ```bash
@@ -160,6 +203,6 @@ mvn test    # 73 个
 ## 已知边界（主动交代）
 
 - **Redis / Lua 分布式配额未在本环境运行验证**：没有本地 Redis。桶的算术由 `TokenBucketMath` 抽出并被单测证明，Lua 是它的转录，条件装配 + 内存实现兜底。`gateway.quota.distributed=true` 才启用。
-- **压测数据待补**：并发流式连接拐点、"网关端到端 P99 − 上游 P99 = 网关自身开销"的正式测量还没跑。
-- **语义缓存在规划中**：只做精确匹配。语义相似检索的误命中代价是"答错"，需要离线评测集校准阈值后才敢上。
+- **压测归因没做完**：高并发下客户端 TTFT 与网关内部 TTFT 之间约 360ms 的缺口只排除了两个假设（出站连接串行、每 token 编解码），剩下的需要 JFR 采样定位；且压测机与网关同机争抢 CPU，绝对数字只能定向不能定容。
+- **语义缓存未实现**：只做精确匹配。语义相似检索的误命中代价是"答错"，需要离线评测集校准阈值后才敢上。
 - 演示配置里的 `sk-*-dev` 是本机假 key，只对接 mock 上游，不含任何真实凭据。

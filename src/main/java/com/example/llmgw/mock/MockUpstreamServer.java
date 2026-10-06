@@ -55,7 +55,9 @@ public final class MockUpstreamServer {
     }
 
     public void start() throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+        // Backlog must be explicit: the JDK default (50) refuses connections under a stream-concurrency
+        // test, which then measures the simulator's accept queue instead of the gateway.
+        HttpServer server = HttpServer.create(new InetSocketAddress(port), 1024);
         server.createContext("/v1/chat/completions", this::handleCompletions);
         server.createContext("/stats", this::handleStats);
         server.createContext("/control", this::handleControl);

@@ -10,6 +10,7 @@ import com.example.llmgw.cache.CacheKeyFactory;
 import com.example.llmgw.cache.ResponseCache;
 import com.example.llmgw.config.GatewayProperties;
 import com.example.llmgw.obs.GatewayMetrics;
+import com.example.llmgw.obs.RequestArrivalFilter;
 import com.example.llmgw.protocol.ChatCompletionRequest;
 import com.example.llmgw.protocol.UpstreamResult;
 import com.example.llmgw.protocol.Usage;
@@ -91,6 +92,10 @@ public class ChatCompletionController {
                               HttpServletResponse servletResponse) {
         Tenant tenant = (Tenant) servletRequest.getAttribute(ApiKeyAuthFilter.TENANT_ATTRIBUTE);
         String requestId = (String) servletRequest.getAttribute(ApiKeyAuthFilter.REQUEST_ID_ATTRIBUTE);
+        Object arrivedAt = servletRequest.getAttribute(RequestArrivalFilter.ARRIVAL_ATTRIBUTE);
+        if (arrivedAt instanceof Long stamp) {
+            metrics.admissionLatency((System.nanoTime() - stamp) / 1_000_000);
+        }
         ChatCompletionRequest request = canonicalize(raw);
         List<UpstreamTarget> candidates = router.candidates(request.model());
 
@@ -260,6 +265,7 @@ public class ChatCompletionController {
         long created = System.currentTimeMillis() / 1000;
         String chunkId = "chatcmpl-" + requestId;
         streamWorkers.submit(() -> {
+            metrics.streamStarted();
             try {
                 writer.data(chunk(chunkId, created, cached.model(), Map.of("content", cached.content()),
                         null, null, false));
@@ -269,6 +275,7 @@ public class ChatCompletionController {
             } catch (ClientDisconnectedException e) {
                 metrics.abandonedStream("cache", "downstream_closed");
             } finally {
+                metrics.streamFinished();
                 writer.completeQuietly();
                 quota.release(reservation);
             }
@@ -283,6 +290,7 @@ public class ChatCompletionController {
         String chunkId = "chatcmpl-" + requestId;
         long created = System.currentTimeMillis() / 1000;
 
+        metrics.streamStarted();
         try {
             for (int i = 0; i < candidates.size(); i++) {
                 if (writer.closed()) {
@@ -389,6 +397,7 @@ public class ChatCompletionController {
                 }
             }
         } finally {
+            metrics.streamFinished();
             quota.release(reservation);
         }
     }
