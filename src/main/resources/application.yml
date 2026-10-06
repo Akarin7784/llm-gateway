@@ -1,0 +1,131 @@
+server:
+  port: 8080
+  tomcat:
+    # Long-lived SSE responses hold a connection, not a thread, once virtual threads are on.
+    # These bounds are what actually cap concurrent streams, so they are stated rather than defaulted.
+    max-connections: 8192
+    accept-count: 400
+    connection-timeout: 60s
+    keep-alive-timeout: 60s
+    max-keep-alive-requests: 1000
+    threads:
+      max: 200
+      min-spare: 16
+
+spring:
+  application:
+    name: llm-gateway
+  jackson:
+    deserialization:
+      # Pinned rather than inherited: the canonical DTO ignores what it does not model and the raw
+      # JSON is forwarded untouched, so a vendor parameter the gateway has never heard of must not
+      # turn into a 400 at the entrance.
+      fail-on-unknown-properties: false
+  threads:
+    virtual:
+      enabled: true
+  mvc:
+    async:
+      request-timeout: -1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  health:
+    redis:
+      # The Redis backend is opt-in; its health must not drag the gateway's status down when unused.
+      enabled: false
+  metrics:
+    distribution:
+      percentiles-histogram:
+        gateway.e2e.millis: true
+        gateway.upstream.millis: true
+      percentiles:
+        gateway.ttft.millis: 0.5, 0.95, 0.99
+
+gateway:
+  emitter-timeout: 120s
+  # Bounds how long an abandoned client can keep its upstream generation alive: a disconnect is only
+  # discoverable on the next write, and the heartbeat is what forces one on a silent vendor.
+  stream-heartbeat-interval: 2s
+  quota:
+    enabled: true
+    # false = per-replica buckets only. Flip to true to share rpm/tpm/in-flight across replicas via
+    # Redis; the in-memory bucket stays as the fallback if Redis stops answering.
+    distributed: false
+    default-completion-tokens: 512
+    lease-ttl: 5m
+  cache:
+    enabled: true
+    max-entries: 10000
+    ttl: 10m
+    # One team's prompt must not be served from another team's cached answer.
+    tenant-isolation: true
+  routing:
+    window-seconds: 10
+    # Trip only on a rate over a real sample: two requests and one timeout is 50% at 1 a.m.
+    error-threshold: 0.5
+    min-volume: 8
+    # The rate guard needs traffic to see a verdict; scoring diverts it, so a streak is the only signal
+    # a starved vendor ever produces.
+    consecutive-failure-threshold: 3
+    open-duration: 10s
+    half-open-probes: 2
+    latency-weight: 1.0
+    error-weight: 2.0
+    cost-weight: 0.5
+    assumed-prompt-tokens: 500
+    assumed-completion-tokens: 500
+  upstreams:
+    - name: mock-primary
+      vendor: openai-compatible
+      base-url: http://127.0.0.1:9090/v1
+      api-key: sk-mock-primary
+      # Expressive tier: quick and expensive.
+      price-in-per-1k: 0.0060
+      price-out-per-1k: 0.0240
+      models:
+        - gw-demo
+        - gw-cheap
+      connect-timeout: 2s
+      first-token-timeout: 8s
+      read-timeout: 60s
+    - name: mock-standby
+      vendor: openai-compatible
+      base-url: http://127.0.0.1:9091/v1
+      api-key: sk-mock-standby
+      # Budget tier: twelve times cheaper, an order of magnitude slower.
+      price-in-per-1k: 0.0006
+      price-out-per-1k: 0.0024
+      models:
+        - gw-demo
+      connect-timeout: 2s
+      first-token-timeout: 8s
+      read-timeout: 60s
+  tenants:
+    - id: tenant-alpha
+      name: Alpha Team
+      api-key: sk-alpha-dev
+      rpm: 120
+      tpm: 200000
+      max-concurrency: 64
+    - id: tenant-beta
+      name: Beta Team
+      api-key: sk-beta-dev
+      rpm: 30
+      tpm: 50000
+      max-concurrency: 8
+    # Roomy rate limits with a tight in-flight cap, so concurrency rejection can be demonstrated
+    # without the request-rate bucket being the thing that fires first.
+    - id: tenant-gamma
+      name: Gamma Team
+      api-key: sk-gamma-dev
+      rpm: 6000
+      tpm: 2000000
+      max-concurrency: 4
+
+logging:
+  level:
+    com.example.llmgw: INFO
