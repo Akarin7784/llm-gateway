@@ -6,44 +6,69 @@
 <title>LLM Gateway 运维面板</title>
 <style>
   :root {
-    --bg: #0d1117; --panel: #161b22; --line: #21262d; --text: #c9d1d9;
-    --dim: #8b949e; --ok: #3fb950; --warn: #d29922; --bad: #f85149; --accent: #58a6ff;
+    --bg: #0b0e13; --panel: #131922; --panel2: #0f151d; --line: #232c38; --text: #d3dae3;
+    --dim: #7e8b9c; --ok: #3fb950; --warn: #d29922; --bad: #f0554a; --accent: #58a6ff;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
     font: 14px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
-  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
-    padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
-  h1 { font-size: 15px; margin: 0 12px 0 0; font-weight: 600; }
-  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim);
-    margin: 0 0 10px; font-weight: 600; }
-  input, select { background: var(--bg); color: var(--text); border: 1px solid var(--line);
-    border-radius: 6px; padding: 5px 8px; font: 12px ui-monospace, Consolas, monospace; }
-  input[type=password] { width: 220px; }
-  main { padding: 18px 20px 40px; }
-  section { margin-bottom: 26px; }
-  .grid { display: grid; gap: 12px; }
-  .cards { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
-  .card .label { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
-  .card .value { font: 600 24px ui-monospace, Consolas, monospace; margin-top: 4px; }
-  .card .sub { font-size: 11px; color: var(--dim); margin-top: 2px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
-  th { color: var(--dim); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
-  td.num, th.num { text-align: right; font-family: ui-monospace, Consolas, monospace; }
-  .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px;
-    font-weight: 600; border: 1px solid; }
-  .ok { color: var(--ok); border-color: #23803a; background: #12261a; }
-  .warn { color: var(--warn); border-color: #8a6a12; background: #2a2110; }
-  .bad { color: var(--bad); border-color: #9b2c2a; background: #2d1616; }
-  .neutral { color: var(--dim); border-color: var(--line); background: #12171d; }
+  header { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 10px 14px;
+    align-items: center; padding: 12px 22px; border-bottom: 1px solid var(--line);
+    background: rgba(19,25,34,.92); backdrop-filter: blur(6px); }
+  h1 { font-size: 14px; margin: 0 10px 0 0; font-weight: 650; letter-spacing: .01em; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--dim);
+    margin: 0 0 9px; font-weight: 650; }
+  label { font-size: 12px; color: var(--dim); display: inline-flex; align-items: center; gap: 6px; }
+  input, select, button { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 9px; font: 12px ui-monospace, Consolas, monospace; }
+  input[type=password] { width: 190px; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); color: #fff; }
+  #status { font-size: 12px; color: var(--dim); margin-left: auto; font-family: ui-monospace, monospace; }
+  #status.bad { color: var(--bad); }
+  main { padding: 20px 22px 48px; max-width: 1500px; margin: 0 auto; }
+  section { margin-bottom: 24px; }
+  .tiles { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 10px 13px; }
+  .tile .label { font-size: 10.5px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  .tile .value { font: 650 21px ui-monospace, Consolas, monospace; margin-top: 3px; }
+  .tile .sub { font-size: 10.5px; color: var(--dim); margin-top: 1px; }
   .split { color: var(--accent); }
-  canvas { width: 100%; height: 46px; display: block; }
-  .note { font-size: 11px; color: var(--dim); margin-top: 8px; }
-  .two { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
-  .missing { color: #4d565f; }
-  #status { font-size: 12px; color: var(--dim); margin-left: auto; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .cols { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); align-items: start; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: 0; }
+  th { color: var(--dim); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
+  td.num, th.num { text-align: right; font-family: ui-monospace, Consolas, monospace; }
+  .chip { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10.5px;
+    font-weight: 650; border: 1px solid; }
+  .chip.ok { border-color: #23803a; background: #12261a; }
+  .chip.warn { border-color: #8a6a12; background: #2a2110; }
+  .chip.bad { border-color: #9b2c2a; background: #2d1616; }
+  .chip.neutral { color: var(--dim); border-color: var(--line); background: #10161e; }
+  .missing { color: #4a5462; }
+  canvas { width: 100%; height: 54px; display: block; }
+  .note { font-size: 11px; color: var(--dim); margin-top: 9px; }
+  svg { width: 100%; height: auto; display: block; }
+  .node rect { fill: var(--panel); stroke: var(--line); stroke-width: 1; rx: 9px; }
+  .node .title { font-size: 11px; fill: var(--dim); }
+  .node .count { font: 650 17px ui-monospace, Consolas, monospace; fill: var(--text); }
+  .node .detail { font-size: 9.5px; fill: #5f6c7d; font-family: ui-monospace, monospace; }
+  .node.hot rect { stroke: var(--accent); fill: #16202e; }
+  .edge { stroke: #33414f; stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+  .edge.hot { stroke: var(--accent); stroke-dasharray: 5 5; animation: flow 1.1s linear infinite; }
+  .edge.bypass { stroke: #2c6b3f; stroke-dasharray: 4 4; marker-end: url(#arrowGreen); }
+  .edge.bypass.hot { stroke: var(--ok); animation: flow 1.1s linear infinite; }
+  .edge.drop { stroke: #6b2b28; stroke-dasharray: 3 4; marker-end: url(#arrowRed); }
+  .edge.drop.hot { stroke: var(--bad); }
+  @keyframes flow { to { stroke-dashoffset: -20; } }
+  .edgeLabel { font-size: 9.5px; fill: #64717f; font-family: ui-monospace, monospace; }
+  .band { fill: #10161e; stroke: var(--line); stroke-dasharray: 3 4; rx: 8px; }
+  .bandText { font-size: 10px; fill: #7e8b9c; font-family: ui-monospace, monospace; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11px; color: var(--dim); margin-top: 10px; }
+  .legend i { display: inline-block; width: 20px; height: 0; border-top: 2px solid; margin-right: 5px; vertical-align: middle; }
 </style>
 </head>
 <body>
@@ -64,55 +89,91 @@
 
 <main>
   <section>
-    <h2>实时</h2>
-    <div class="grid cards" id="live"></div>
-    <div class="card" style="margin-top:12px">
-      <div class="label">吞吐（requests/s，由累计计数器差分得到）</div>
-      <canvas id="spark" width="1200" height="46"></canvas>
-      <div class="note">面板读的是网关自己的 <code>gateway_requests_total</code>，每个数字都可在 /actuator/prometheus 核对。</div>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <section>
+    <h2>实时架构图</h2>
+    <div class="card">
+      <svg id="pipe" viewBox="0 0 1240 404" role="img" aria-label="请求生命周期与分流">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="#33414f"/>
+          </marker>
+          <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="#2c6b3f"/>
+          </marker>
+          <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="#6b2b28"/>
+          </marker>
+        </defs>
+        <g id="edges"></g>
+        <g id="nodes"></g>
+        <g id="bands"></g>
+      </svg>
+      <div class="legend">
+        <span><i style="border-color:var(--accent)"></i>主路径（亮起=上一个刷新周期有流量）</span>
+        <span><i style="border-color:#2c6b3f;border-top-style:dashed"></i>缓存命中回放（不打厂商）</span>
+        <span><i style="border-color:#6b2b28;border-top-style:dashed"></i>拒绝出口 / 溢出落盘</span>
+      </div>
+      <div class="note">每个数字都来自网关自己的计数器，口径见 /actuator/prometheus。图上没有"总请求数"这种无法自证的合成指标。</div>
     </div>
   </section>
 
-  <section>
-    <h2>延迟分解</h2>
-    <div class="grid cards" id="latency"></div>
-    <div class="note">三段互不重叠：<b>admission</b> = servlet 入口到控制器；<b>网关内部</b> = 端到端减去上游一跳；<b>上游</b> = 真正打到厂商的时间。
-      把 TTFT 退化归因到"是不是网关代码慢"必须靠这个拆分，而不是猜。</div>
+  <section class="cols">
+    <div class="card">
+      <h2>延迟分解</h2>
+      <table id="latency"></table>
+      <div class="note">三段互不重叠，用来回答"TTFT 退化是不是网关代码造成的"：
+        <b>admission</b> servlet 入口→控制器；<b>网关自身</b> 端到端均值−上游均值；<b>上游</b> 真正打到厂商。
+        分位数由 histogram 桶线性插值，<b>桶粒度决定了它的精度</b>。</div>
+    </div>
+    <div class="card">
+      <h2>吞吐（requests/s，累计计数器差分）</h2>
+      <canvas id="spark" width="1200" height="54"></canvas>
+      <table id="upstreamLatency" style="margin-top:10px"></table>
+    </div>
   </section>
 
-  <section>
-    <h2>上游与熔断</h2>
-    <div class="card"><table id="upstreams"></table></div>
-  </section>
-
-  <section class="grid two">
-    <div>
+  <section class="cols">
+    <div class="card">
+      <h2>上游与熔断</h2>
+      <table id="upstreams"></table>
+      <div class="note">跳闸/恢复次数来自 <code>gateway_circuit_transition_total</code>，不猜测状态历史。</div>
+    </div>
+    <div class="card">
       <h2>结果与拒绝分布</h2>
-      <div class="card"><table id="outcomes"></table></div>
+      <table id="outcomes"></table>
     </div>
-    <div>
+  </section>
+
+  <section class="cols">
+    <div class="card">
       <h2>缓存与配额</h2>
-      <div class="card"><table id="counters"></table></div>
+      <table id="counters"></table>
+    </div>
+    <div class="card">
+      <h2>对账（/v1/billing/reconcile）</h2>
+      <table id="reconcile"></table>
+      <div class="note" id="reconcile-note"></div>
     </div>
   </section>
 
   <section>
-    <h2>花费（/v1/billing/summary）</h2>
-    <div class="card"><table id="spend"></table></div>
-    <div class="note">cost 为<b>整数微单位</b>累加，不做浮点求和；换算系数取决于 model_catalog 的每千 token 定价。</div>
-  </section>
-
-  <section>
-    <h2>对账（/v1/billing/reconcile）</h2>
-    <div class="card"><table id="reconcile"></table></div>
-    <div class="note" id="reconcile-note"></div>
+    <div class="card">
+      <h2>花费（/v1/billing/summary）</h2>
+      <table id="spend"></table>
+      <div class="note">cost 为<b>整数微单位</b>累加而非浮点求和；换算系数取决于 model_catalog 的每千 token 定价。</div>
+    </div>
   </section>
 </main>
 
 <script>
 "use strict";
 
-const state = { history: [], lastTotal: null, lastAt: null, timer: null };
+/* ------------------------------------------------------------------ data model */
+
+const state = { history: [], lastTotal: null, lastAt: null, timer: null, prev: {}, built: false };
 
 const el = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
@@ -124,18 +185,12 @@ function fmt(n) {
 }
 const ms = n => n === null || n === undefined ? "—" : fmt(n) + " ms";
 const pct = n => n === null || n === undefined ? "—" : (n * 100).toFixed(1) + "%";
-
-/** Missing series are rendered as an em dash: a counter that never fired is not the same as a zero. */
-function card(label, value, sub, tone) {
-  return `<div class="card"><div class="label">${label}</div>`
-       + `<div class="value${tone ? " " + tone : ""}">${value}</div>`
-       + `<div class="sub">${sub || ""}</div></div>`;
-}
+const chip = (text, tone) => `<span class="chip ${tone}">${text}</span>`;
+const stateTone = s => s === "CLOSED" ? "ok" : s === "HALF_OPEN" ? "warn" : "bad";
 
 /**
- * Prometheus exposition parser, deliberately tiny: the gateway already exposes text format and
- * pulling it here avoids inventing a second, drifting "stats API" that would disagree with the
- * metrics every Grafana panel reads.
+ * Tiny Prometheus text parser. The page reads the same exposition a scraper does, so there is no
+ * second statistics API to drift away from the numbers that actually matter.
  */
 function parsePrometheus(text) {
   const series = [];
@@ -148,8 +203,8 @@ function parsePrometheus(text) {
     const name = brace < 0 ? key : key.slice(0, brace);
     const labels = {};
     if (brace >= 0) {
-      // Real label tokenizer: splitting on "," breaks as soon as a value contains a comma, and every
-      // grouped figure on this page would then be filed under a truncated key.
+      // Full key="value" scan: splitting on commas breaks on the second label, and every grouped
+      // figure downstream would then be filed under a truncated key.
       const pattern = /([A-Za-z_][A-Za-z0-9_]*)="((?:[^"\\]|\\.)*)"/g;
       let match;
       while ((match = pattern.exec(key.slice(brace + 1))) !== null) {
@@ -162,12 +217,10 @@ function parsePrometheus(text) {
     series,
     sum: n => series.filter(s => s.name === n).reduce((a, s) => a + s.value, 0),
     first: n => (series.find(s => s.name === n) || {}).value ?? null,
-    max: n => series.filter(s => s.name === n).reduce((a, s) => Math.max(a, s.value), -Infinity),
-    byLabels: n => series.filter(s => s.name === n),
+    byLabels: (n, filter) => series.filter(s => s.name === n && (!filter || filter(s.labels))),
   };
 }
 
-/** Percentile from histogram buckets, merging every tag set into one distribution. */
 function bucketPercentile(metrics, name, quantile) {
   const buckets = metrics.byLabels(name + "_bucket");
   if (!buckets.length) return null;
@@ -185,7 +238,6 @@ function bucketPercentile(metrics, name, quantile) {
   for (const [bound, count] of sorted) {
     if (count >= target) {
       if (!isFinite(bound)) return previousBound;
-      // Linear interpolation inside the bucket: the honest limit of what buckets can tell you.
       const share = (target - previousCount) / Math.max(1, count - previousCount);
       return (previousBound + share * (bound - previousBound)) * 1000;
     }
@@ -195,11 +247,233 @@ function bucketPercentile(metrics, name, quantile) {
   return null;
 }
 
-function chip(text, tone) { return `<span class="chip ${tone}">${text}</span>`; }
+/* ------------------------------------------------------------------ pipeline diagram */
 
-function stateTone(state) {
-  return state === "CLOSED" ? "ok" : state === "HALF_OPEN" ? "warn" : "bad";
+const W = 138, H = 60;
+const NODES = [
+  { id: "client",  x: 14,   y: 34,  title: "入口 / 认证前" },
+  { id: "auth",    x: 190,  y: 34,  title: "API Key 认证" },
+  { id: "key",     x: 366,  y: 34,  title: "归一化 + 缓存键" },
+  { id: "cache",   x: 542,  y: 34,  title: "精确缓存" },
+  { id: "admit",   x: 718,  y: 34,  title: "准入：租约+RPM+TPM" },
+  { id: "route",   x: 894,  y: 34,  title: "打分路由 / 熔断" },
+  { id: "up1",     x: 1084, y: 20,  title: "上游 #1", small: true, wide: true },
+  { id: "up2",     x: 1084, y: 96,  title: "上游 #2", small: true, wide: true },
+  { id: "replay",  x: 542,  y: 250, title: "命中回放" },
+  { id: "settle",  x: 718, y: 250,  title: "结算 / 回补" },
+  { id: "queue",   x: 894, y: 250,  title: "流水队列" },
+  { id: "db",      x: 1084, y: 250, title: "H2 / MySQL" },
+  { id: "spill",   x: 894, y: 334,  title: "溢出落盘", small: true },
+];
+const EDGES = [
+  ["client", "auth"], ["auth", "key"], ["key", "cache"], ["cache", "admit"],
+  ["admit", "route"], ["route", "up1"], ["route", "up2"],
+  ["up1", "settle", { fromSide: "b", toSide: "r" }], ["up2", "settle", { fromSide: "b", toSide: "r" }],
+  ["cache", "replay", { fromSide: "b", toSide: "t", cls: "bypass" }],
+  ["replay", "settle", { cls: "bypass" }],
+  ["settle", "queue"], ["queue", "db"],
+  ["queue", "spill", { fromSide: "b", toSide: "l", cls: "drop" }],
+  ["spill", "db", { fromSide: "r", toSide: "b", cls: "bypass" }],
+  ["auth", "rejects", { fromSide: "b", toSide: "t", cls: "drop" }],
+  ["key", "rejects2", { fromSide: "b", toSide: "t", cls: "drop" }],
+  // A 429 leaves at admission; a 404 for an unknown model leaves at routing, before the cache is even
+  // consulted. Two different exits, so they get two different arrows rather than one shared band.
+  ["admit", "rejects3", { fromSide: "b", toSide: "t", cls: "drop" }],
+  ["route", "rejects4", { fromSide: "b", toSide: "t", cls: "drop" }],
+];
+const REJECT_BANDS = [
+  { id: "rejects", x: 176, w: 118, label: "401 认证" },
+  { id: "rejects2", x: 352, w: 118, label: "400 请求体" },
+  { id: "rejects3", x: 704, w: 118, label: "429 配额" },
+  { id: "rejects4", x: 880, w: 118, label: "404 未知模型" },
+];
+
+function nodeW(node) {
+  return node.w || (node.wide ? 150 : W);
 }
+
+function anchor(node, side) {
+  const height = node.small ? 46 : H;
+  const width = nodeW(node);
+  switch (side) {
+    case "r": return [node.x + width, node.y + height / 2];
+    case "l": return [node.x, node.y + height / 2];
+    case "t": return [node.x + width / 2, node.y];
+    default: return [node.x + width / 2, node.y + height];
+  }
+}
+
+function curve(a, b, fromSide, toSide) {
+  const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]);
+  const reach = Math.max(28, Math.min(90, dx * 0.45, (Math.abs(dx) + dy) * 0.4));
+  const out = (p, side, d) => side === "r" ? [p[0] + d, p[1]] : side === "l" ? [p[0] - d, p[1]]
+    : side === "b" ? [p[0], p[1] + d] : [p[0], p[1] - d];
+  const c1 = out(a, fromSide, reach);
+  const c2 = out(b, toSide, reach);
+  return `M${a[0]},${a[1]} C${c1[0]},${c1[1]} ${c2[0]},${c2[1]} ${b[0]},${b[1]}`;
+}
+
+const byId = Object.fromEntries(NODES.concat(REJECT_BANDS.map(b => ({ ...b, y: 168 })))
+  .map(n => [n.id, n]));
+
+function buildPipeline() {
+  const nodeMarkup = NODES.map(n => {
+    const width = nodeW(n);
+    const height = n.small ? 46 : H;
+    return `
+    <g class="node" id="node-${n.id}">
+      <rect x="${n.x}" y="${n.y}" width="${width}" height="${height}" rx="9"></rect>
+      <text class="title" x="${n.x + 11}" y="${n.y + 16}">${esc(n.title)}</text>
+      <text class="count" id="count-${n.id}" x="${n.x + 11}" y="${n.y + (n.small ? 38 : 41)}">—</text>
+      <text class="detail" id="detail-${n.id}" x="${n.x + 11}" y="${n.y + (n.small ? 46 : 55)}"></text>
+    </g>`;
+  }).join("");
+
+  const bandMarkup = REJECT_BANDS.map(b => `<g><rect class="band" x="${b.x}" y="168" width="${b.w}" height="34" rx="8"></rect>
+      <text class="bandText" x="${b.x + 10}" y="182">${esc(b.label)}</text>
+      <text class="bandText" id="count-${b.id}" x="${b.x + 10}" y="196" style="fill:#a05a55">—</text></g>`).join("");
+
+  const edgeMarkup = EDGES.map(([from, to, opts]) => {
+    const a = byId[from], b = byId[to];
+    if (!a || !b) return "";
+    const o = opts || {};
+    const fromSide = o.fromSide || "r", toSide = o.toSide || "l";
+    const start = anchor(a, fromSide), end = anchor(b, toSide);
+    const cls = "edge " + (o.cls || "");
+    return `<path id="edge-${from}-${to}" class="${cls}" d="${curve(start, end, fromSide, toSide)}"></path>`;
+  }).join("");
+
+  el("nodes").innerHTML = nodeMarkup;
+  el("bands").innerHTML = bandMarkup;
+  el("edges").innerHTML = edgeMarkup;
+  state.built = true;
+}
+
+function setNode(id, value, detail, activityKey) {
+  const count = el("count-" + id);
+  if (!count) return;
+  count.textContent = value;
+  const detailEl = el("detail-" + id);
+  if (detailEl) detailEl.textContent = detail || "";
+  const node = el("node-" + id);
+  if (node) node.classList.toggle("hot", !!delta(activityKey || id, value));
+}
+
+/** Positive when this counter moved since the last paint: what makes the diagram live rather than a tally. */
+function delta(key, current) {
+  const numeric = typeof current === "number" ? current : Number(String(current).replace(/,/g, ""));
+  if (!Number.isFinite(numeric)) return 0;
+  const previous = state.prev[key];
+  state.prev[key] = numeric;
+  return previous === undefined ? 0 : numeric - previous;
+}
+
+function renderPipeline(metrics, routing) {
+  if (!state.built) buildPipeline();
+
+  const requests = metrics.sum("gateway_requests_total");
+  const rejected = stage => metrics.byLabels("gateway_rejected_total", l => l.stage === stage)
+    .reduce((a, s) => a + s.value, 0);
+  const quotaRejected = metrics.sum("gateway_quota_rejected_total");
+  const authReject = rejected("auth"), badRequest = rejected("bad_request"), modelMiss = rejected("model_not_found");
+
+  const hits = metrics.byLabels("gateway_cache_lookup_total", l => l.outcome === "hit")
+    .reduce((a, s) => a + s.value, 0);
+  const misses = metrics.byLabels("gateway_cache_lookup_total", l => l.outcome === "miss")
+    .reduce((a, s) => a + s.value, 0);
+  const bypassed = metrics.byLabels("gateway_cache_lookup_total", l => l.outcome === "bypassed")
+    .reduce((a, s) => a + s.value, 0);
+
+  const admitted = metrics.sum("gateway_quota_admitted_total");
+  const upstreamCalls = name => metrics.byLabels("gateway_requests_total", l => l.upstream === name)
+    .reduce((a, s) => a + s.value, 0);
+
+  // Derive the funnel forward from the earliest stage counters. Reconstructing arrivals from outcomes
+  // cannot work: admitted counts a request the moment it is let through, requests_total only when it
+  // settles, so the difference is whatever is in flight right now and the funnel would appear to lose
+  // traffic under load.
+  const lookups = hits + misses + bypassed;
+  const afterParse = lookups + modelMiss;      // an unknown model leaves before the cache is consulted
+  const afterAuth = afterParse + badRequest;
+  const arrivals = afterAuth + authReject;
+  const inflight = admitted - requests;
+
+  setNode("client", fmt(arrivals), "到达网关的一切，含被拒");
+  setNode("auth", fmt(afterAuth), `拒绝 ${fmt(authReject)}`);
+  setNode("key", fmt(afterParse), `拒绝 ${fmt(badRequest)}`);
+  setNode("cache", fmt(lookups), `hit ${fmt(hits)} · miss ${fmt(misses)} · 跳过 ${fmt(bypassed)}`);
+  setNode("admit", fmt(admitted), `放行；拒绝 ${fmt(quotaRejected)}`);
+  setNode("route", fmt(admitted), `强制路由 ${fmt(metrics.sum("gateway_route_forced_total"))}`);
+
+  setNode("replay", fmt(hits), "X-Upstream: cache");
+  setNode("settle", fmt(requests), inflight > 0 ? `在途 ${fmt(inflight)} 未结算` : `回补 ${fmt(metrics.sum("gateway_quota_refunded_tokens_total"))} token`);
+  setNode("queue", fmt(metrics.first("gateway_ledger_queue_depth") ?? 0), "积压行数");
+  setNode("db", fmt(metrics.sum("gateway_ledger_written_total")), "已写行");
+  setNode("spill", fmt(metrics.sum("gateway_ledger_spilled_total")), "溢出，启动时回放");
+
+  // Sorted so the two boxes do not swap between refreshes: the map behind this comes from a
+  // ConcurrentHashMap, whose iteration order is not a contract.
+  const upstreamNames = Object.keys(routing || {}).sort();
+  ["up1", "up2"].forEach((slot, index) => {
+    const name = upstreamNames[index];
+    const titleEl = el("node-" + slot)?.querySelector(".title");
+    if (!name) {
+      if (titleEl) titleEl.textContent = slot === "up1" ? "上游 #1" : "上游 #2";
+      setNode(slot, "—", "");
+      return;
+    }
+    const info = routing[name];
+    if (titleEl) titleEl.textContent = name + " · " + info.state;
+    const rect = el("node-" + slot)?.querySelector("rect");
+    if (rect) rect.setAttribute("stroke",
+      info.state === "CLOSED" ? "#2c6b3f" : info.state === "HALF_OPEN" ? "#8a6a12" : "#9b2c2a");
+    setNode(slot, fmt(upstreamCalls(name)),
+      `窗口 ${fmt(info.window_requests)} · ${fmt(info.mean_latency_ms)}ms · err ${pct(info.error_rate)}`,
+      "up:" + name);
+  });
+
+  setNode("rejects", fmt(authReject), "", "rej-auth");
+  setNode("rejects2", fmt(badRequest), "", "rej-req");
+  setNode("rejects3", fmt(quotaRejected), "", "rej-quota");
+  setNode("rejects4", fmt(modelMiss), "", "rej-model");
+
+  const live = {
+    "edge-client-auth": arrivals,
+    "edge-auth-key": afterAuth,
+    "edge-key-cache": afterParse,
+    "edge-cache-admit": misses + bypassed,
+    "edge-admit-route": admitted,
+    "edge-settle-queue": admitted,
+    "edge-queue-db": metrics.sum("gateway_ledger_written_total"),
+  };
+  for (const [id, value] of Object.entries(live)) {
+    const path = el(id);
+    if (path) path.classList.toggle("hot", delta("edge:" + id, value) > 0);
+  }
+  for (const suffix of ["cache-replay", "replay-settle"]) {
+    const path = el("edge-" + suffix);
+    if (path) path.classList.toggle("hot", delta("edge:" + suffix, hits) > 0);
+  }
+  for (const suffix of ["queue-spill"]) {
+    const path = el("edge-" + suffix);
+    if (path) path.classList.toggle("hot", delta("edge:" + suffix, metrics.sum("gateway_ledger_spilled_total")) > 0);
+  }
+  const spillToDb = el("edge-spill-db");
+  if (spillToDb) spillToDb.classList.toggle("hot", delta("edge:spill-db", metrics.sum("gateway_ledger_replayed_total")) > 0);
+
+  const drops = {
+    "edge-auth-rejects": authReject,
+    "edge-key-rejects2": badRequest,
+    "edge-admit-rejects3": quotaRejected,
+    "edge-route-rejects4": modelMiss,
+  };
+  for (const [id, value] of Object.entries(drops)) {
+    const path = el(id);
+    if (path) path.classList.toggle("hot", delta("edge:" + id, value) > 0);
+  }
+}
+
+/* ------------------------------------------------------------------ fetch + other panels */
 
 async function fetchText(url, headers) {
   const response = await fetch(url, { headers });
@@ -207,46 +481,72 @@ async function fetchText(url, headers) {
   return response.text();
 }
 
-function renderLive(metrics, rate) {
+function renderTiles(metrics) {
+  const tile = (label, value, sub, tone) =>
+    `<div class="tile"><div class="label">${label}</div><div class="value ${tone || ""}">${value}</div>`
+    + `<div class="sub">${sub || ""}</div></div>`;
   const active = metrics.first("gateway_streams_active");
-  const hitRatio = metrics.first("gateway_cache_hit_ratio");
-  const entries = metrics.first("gateway_cache_entries");
-  const requests = metrics.sum("gateway_requests_total");
   const ttftMean = (() => {
-    const sum = metrics.sum("gateway_ttft_millis_sum");
-    const count = metrics.sum("gateway_ttft_millis_count");
+    const sum = metrics.sum("gateway_ttft_millis_sum"), count = metrics.sum("gateway_ttft_millis_count");
     return count ? sum / count : null;
   })();
-  const queue = metrics.first("gateway_ledger_queue_depth");
-
-  el("live").innerHTML = [
-    card("在传流数", fmt(active), "网关自己计数，不是数 socket", active > 0 ? "split" : ""),
-    card("TTFT 均值", ms(ttftMean), "控制器开工 → 收到厂商首 token"),
-    card("吞吐", rate === null ? "—" : fmt(rate) + " rps", `累计请求 ${fmt(requests)}`),
-    card("缓存命中率", pct(hitRatio), `条目 ${fmt(entries)}`),
-    card("流水队列积压", fmt(queue), "满则落盘，不丢行"),
-    card("已写流水", fmt(metrics.sum("gateway_ledger_written_total")), "批量 INSERT IGNORE"),
+  el("tiles").innerHTML = [
+    tile("在传流数", fmt(active), "网关自计，非 socket 统计", active > 0 ? "split" : ""),
+    tile("TTFT 均值", ms(ttftMean), "开工 → 厂商首 token"),
+    tile("端到端 p99", ms(bucketPercentile(metrics, "gateway_e2e_millis_seconds", 0.99)), "桶插值"),
+    tile("admission 均值", (() => {
+      const sum = metrics.sum("gateway_admission_millis_sum"), count = metrics.sum("gateway_admission_millis_count");
+      return count ? ms(sum / count / 1e6) : "—";
+    })(), "入口 → 控制器"),
+    tile("缓存命中率", pct(metrics.first("gateway_cache_hit_ratio")), `条目 ${fmt(metrics.first("gateway_cache_entries"))}`),
+    tile("已写流水", fmt(metrics.sum("gateway_ledger_written_total")), "批量 INSERT IGNORE"),
+    tile("溢出 / 丢失", `${fmt(metrics.sum("gateway_ledger_spilled_total"))} / ${fmt(metrics.sum("gateway_ledger_lost_total"))}`, "丢了才算真出事",
+      metrics.sum("gateway_ledger_lost_total") > 0 ? "bad" : ""),
+    tile("熔断跳闸", fmt(metrics.sum("gateway_circuit_transition_total")), "全部状态迁移次数"),
   ].join("");
 }
 
 function renderLatency(metrics) {
-  const admissionSum = metrics.sum("gateway_admission_millis_sum");
-  const admissionCount = metrics.sum("gateway_admission_millis_count");
-  const e2eSum = metrics.sum("gateway_e2e_millis_seconds_sum");
-  const e2eCount = metrics.sum("gateway_e2e_millis_seconds_count");
-  const upSum = metrics.sum("gateway_upstream_millis_seconds_sum");
-  const upCount = metrics.sum("gateway_upstream_millis_seconds_count");
-  const inside = e2eCount && upCount ? (e2eSum / e2eCount - upSum / upCount) * 1000 : null;
+  const rows = [
+    ["admission", (() => {
+      const sum = metrics.sum("gateway_admission_millis_sum"), count = metrics.sum("gateway_admission_millis_count");
+      return count ? ms(sum / count / 1e6) : "—";
+    })(), "servlet 入口 → 控制器"],
+    ["端到端 p50 / p95 / p99",
+      [0.5, 0.95, 0.99].map(q => fmt(bucketPercentile(metrics, "gateway_e2e_millis_seconds", q))).join(" / ") + " ms",
+      "含排队与网络"],
+    ["上游一跳均值", (() => {
+      const sum = metrics.sum("gateway_upstream_millis_seconds_sum"), count = metrics.sum("gateway_upstream_millis_seconds_count");
+      return count ? ms(sum / count * 1000) : "—";
+    })(), "真正打到厂商"],
+    ["网关自身", (() => {
+      const es = metrics.sum("gateway_e2e_millis_seconds_sum"), ec = metrics.sum("gateway_e2e_millis_seconds_count");
+      const us = metrics.sum("gateway_upstream_millis_seconds_sum"), uc = metrics.sum("gateway_upstream_millis_seconds_count");
+      return es && ec && us && uc ? ms((es / ec - us / uc) * 1000) : "—";
+    })(), "端到端均值 − 上游均值"],
+  ];
+  el("latency").innerHTML = "<tbody>" + rows.map(r =>
+    `<tr><td>${r[0]}</td><td class="num">${r[1]}</td><td style="color:var(--dim)">${r[2]}</td></tr>`).join("") + "</tbody>";
+}
 
-  el("latency").innerHTML = [
-    card("admission 均值", admissionCount ? ms(admissionSum / admissionCount / 1e6) : "—",
-      "servlet 入口 → 控制器；高并发下 TTFT 是否卡在排队看这里"),
-    card("端到端 p50 / p99",
-      `${fmt(bucketPercentile(metrics, "gateway_e2e_millis_seconds", 0.5))} / ${fmt(bucketPercentile(metrics, "gateway_e2e_millis_seconds", 0.99))} ms`,
-      "由 histogram 桶插值，桶粒度决定了它的精度"),
-    card("上游一跳均值", upCount ? ms(upSum / upCount * 1000) : "—", "真正打到厂商的时间"),
-    card("网关自身开销", inside === null ? "—" : ms(inside), "端到端均值 − 上游均值"),
-  ].join("");
+function renderUpstreamLatency(metrics) {
+  // Aggregate per upstream: the timer is tagged by model as well, and emitting one row per tag set
+  // while summing the totals across models would pair a count with the wrong sum.
+  const byUpstream = new Map();
+  for (const s of metrics.byLabels("gateway_upstream_millis_seconds_count")) {
+    const row = byUpstream.get(s.labels.upstream) || { count: 0, sum: 0 };
+    row.count += s.value;
+    byUpstream.set(s.labels.upstream, row);
+  }
+  for (const s of metrics.byLabels("gateway_upstream_millis_seconds_sum")) {
+    const row = byUpstream.get(s.labels.upstream);
+    if (row) row.sum += s.value;
+  }
+  const rows = [...byUpstream.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, row]) =>
+    `<tr><td>${esc(name)}</td><td class="num">${fmt(row.count)}</td>`
+    + `<td class="num">${row.count ? ms(row.sum / row.count * 1000) : "—"}</td></tr>`);
+  el("upstreamLatency").innerHTML = `<thead><tr><th>上游</th><th class="num">样本</th><th class="num">均值</th></tr></thead>`
+    + `<tbody>${rows.join("") || '<tr><td colspan="3" class="missing">尚无成功请求</td></tr>'}</tbody>`;
 }
 
 function renderUpstreams(routing, metrics) {
@@ -254,80 +554,66 @@ function renderUpstreams(routing, metrics) {
   const count = (from, to, upstream) => transitions
     .filter(s => s.labels.from === from && s.labels.to === to && s.labels.upstream === upstream)
     .reduce((a, s) => a + s.value, 0);
-
   const rows = Object.entries(routing || {}).map(([name, info]) => {
     const opened = count("CLOSED", "OPEN", name) + count("HALF_OPEN", "OPEN", name);
     const recovered = count("HALF_OPEN", "CLOSED", name);
-    return `<tr><td>${esc(name)}</td>`
-      + `<td>${chip(info.state, stateTone(info.state))}</td>`
-      + `<td class="num">${pct(info.error_rate)}</td>`
-      + `<td class="num">${fmt(info.mean_latency_ms)} ms</td>`
+    return `<tr><td>${esc(name)}</td><td>${chip(info.state, stateTone(info.state))}</td>`
+      + `<td class="num">${pct(info.error_rate)}</td><td class="num">${fmt(info.mean_latency_ms)} ms</td>`
       + `<td class="num">${fmt(info.window_requests)}</td>`
-      + `<td class="num">${opened ? `<span class="bad">${opened}</span>` : '<span class="missing">0</span>'}</td>`
-      + `<td class="num">${recovered ? `<span class="ok">${recovered}</span>` : '<span class="missing">0</span>'}</td></tr>`;
+      + `<td class="num">${opened ? chip("×" + opened, "bad") : '<span class="missing">0</span>'}</td>`
+      + `<td class="num">${recovered ? chip("×" + recovered, "ok") : '<span class="missing">0</span>'}</td></tr>`;
   }).join("");
-
-  el("upstreams").innerHTML = `<thead><tr><th>上游</th><th>熔断状态</th><th class="num">窗口错误率</th>
-    <th class="num">平均延迟</th><th class="num">窗口请求</th><th class="num">跳闸次数</th>
-    <th class="num">恢复次数</th></tr></thead><tbody>${rows || '<tr><td colspan="7">无数据</td></tr>'}</tbody>`;
+  el("upstreams").innerHTML = `<thead><tr><th>上游</th><th>熔断</th><th class="num">窗口错误率</th>
+    <th class="num">平均延迟</th><th class="num">窗口请求</th><th class="num">跳闸</th><th class="num">恢复</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="7">无数据</td></tr>'}</tbody>`;
 }
 
 function renderOutcomes(metrics) {
-  const group = (name, labelKey) => {
+  const group = (name, key) => {
     const map = new Map();
-    for (const s of metrics.byLabels(name)) {
-      const key = s.labels[labelKey] || "—";
-      map.set(key, (map.get(key) || 0) + s.value);
-    }
+    for (const s of metrics.byLabels(name)) map.set(s.labels[key] || "—", (map.get(s.labels[key] || "—") || 0) + s.value);
     return map;
   };
-  const outcomes = group("gateway_requests_total", "outcome");
-  const rejected = group("gateway_quota_rejected_total", "dimension");
-  const abandoned = group("gateway_stream_abandoned_total", "stage");
-  const degraded = group("gateway_degradation_total", "from");
-
-  const rows = [];
   const toneFor = k => k === "success" ? "ok" : k === "error" || k === "abandoned" ? "bad"
     : k === "degraded" || k === "cached" ? "warn" : "neutral";
-  for (const [k, v] of outcomes) rows.push(`<tr><td>结果</td><td>${chip(k, toneFor(k))}</td><td class="num">${fmt(v)}</td></tr>`);
-  for (const [k, v] of rejected) rows.push(`<tr><td>配额拒绝</td><td>${chip(k, "warn")}</td><td class="num">${fmt(v)}</td></tr>`);
-  for (const [k, v] of abandoned) rows.push(`<tr><td>放弃流</td><td>${chip(k, "bad")}</td><td class="num">${fmt(v)}</td></tr>`);
-  for (const [k, v] of degraded) rows.push(`<tr><td>降级自</td><td>${chip(k, "neutral")}</td><td class="num">${fmt(v)}</td></tr>`);
-
+  const rows = [];
+  for (const [k, v] of group("gateway_requests_total", "outcome"))
+    rows.push(`<tr><td>结果</td><td>${chip(k, toneFor(k))}</td><td class="num">${fmt(v)}</td></tr>`);
+  for (const [k, v] of group("gateway_rejected_total", "stage"))
+    rows.push(`<tr><td>拒绝于</td><td>${chip(k, "bad")}</td><td class="num">${fmt(v)}</td></tr>`);
+  for (const [k, v] of group("gateway_quota_rejected_total", "dimension"))
+    rows.push(`<tr><td>配额拒绝</td><td>${chip(k, "warn")}</td><td class="num">${fmt(v)}</td></tr>`);
+  for (const [k, v] of group("gateway_stream_abandoned_total", "stage"))
+    rows.push(`<tr><td>放弃流</td><td>${chip(k, "bad")}</td><td class="num">${fmt(v)}</td></tr>`);
   el("outcomes").innerHTML = `<thead><tr><th>维度</th><th></th><th class="num">计数</th></tr></thead><tbody>`
     + (rows.join("") || '<tr><td colspan="3" class="missing">尚无流量</td></tr>') + `</tbody>`;
+}
 
+function renderCounters(metrics) {
+  const hits = metrics.byLabels("gateway_cache_lookup_total", l => l.outcome === "hit").reduce((a, s) => a + s.value, 0);
   const kv = [
-    // Summed over outcome="hit" only: adding every lookup would label misses as hits and quietly
-    // inflate the one number people use to judge whether the cache is earning its keep.
-    ["缓存命中查询", metrics.byLabels("gateway_cache_lookup_total")
-      .filter(s => s.labels.outcome === "hit").reduce((a, s) => a + s.value, 0), ""],
-    ["预扣 token", metrics.sum("gateway_quota_reserved_tokens_total"), ""],
-    ["回补 token", metrics.sum("gateway_quota_refunded_tokens_total"), ""],
-    ["超发 token", metrics.sum("gateway_quota_overage_tokens_total"), ""],
-    ["未核销 token", metrics.sum("gateway_quota_unreconciled_tokens_total"), ""],
-    ["节省 token（缓存）", metrics.sum("gateway_cache_saved_tokens_total"), ""],
-    ["降级路由", metrics.sum("gateway_route_forced_total"), ""],
-    ["配额后端退化", metrics.sum("gateway_quota_backend_degraded_total"), ""],
+    ["缓存命中查询", hits],
+    ["预扣 token", metrics.sum("gateway_quota_reserved_tokens_total")],
+    ["回补 token", metrics.sum("gateway_quota_refunded_tokens_total")],
+    ["超发 token", metrics.sum("gateway_quota_overage_tokens_total")],
+    ["未核销 token", metrics.sum("gateway_quota_unreconciled_tokens_total")],
+    ["节省 token（缓存）", metrics.sum("gateway_cache_saved_tokens_total")],
+    ["降级切换", metrics.sum("gateway_degradation_total")],
+    ["配额后端退化", metrics.sum("gateway_quota_backend_degraded_total")],
   ];
   el("counters").innerHTML = `<thead><tr><th>计数</th><th class="num">值</th></tr></thead><tbody>`
-    + kv.map(([label, value]) => `<tr><td>${label}</td><td class="num${value ? "" : " missing"}">${fmt(value)}</td></tr>`).join("")
-    + `</tbody>`;
+    + kv.map(([label, value]) =>
+      `<tr><td>${label}</td><td class="num${value ? "" : " missing"}">${fmt(value)}</td></tr>`).join("") + `</tbody>`;
 }
 
 function renderSpend(summary) {
-  const tenants = Object.entries(summary.all_tenants || {});
-  const outcomes = Object.entries(summary.by_outcome || {});
-  const rows = tenants.map(([tenant, v]) => `<tr><td>${esc(tenant)}</td>`
-    + `<td class="num">${fmt(v.requests)}</td>`
-    + `<td class="num">${fmt(v.prompt_tokens)}</td>`
-    + `<td class="num">${fmt(v.completion_tokens)}</td>`
-    + `<td class="num">${fmt(v.cached_requests)}</td>`
-    + `<td class="num">${fmt(v.cost_micros)}</td></tr>`).join("");
-  const outcomeRows = outcomes.map(([outcome, v]) => `<tr><td>${chip(outcome, "neutral")}</td>`
-    + `<td class="num">${fmt(v.rows)}</td><td class="num">${fmt(v.tokens)}</td>`
-    + `<td class="num">${fmt(v.cost_micros)}</td></tr>`).join("");
-
+  const rows = Object.entries(summary.all_tenants || {}).map(([tenant, v]) =>
+    `<tr><td>${esc(tenant)}</td><td class="num">${fmt(v.requests)}</td>`
+    + `<td class="num">${fmt(v.prompt_tokens)}</td><td class="num">${fmt(v.completion_tokens)}</td>`
+    + `<td class="num">${fmt(v.cached_requests)}</td><td class="num">${fmt(v.cost_micros)}</td></tr>`).join("");
+  const outcomeRows = Object.entries(summary.by_outcome || {}).map(([outcome, v]) =>
+    `<tr><td>${chip(outcome, "neutral")}</td><td class="num">${fmt(v.rows)}</td>`
+    + `<td class="num">${fmt(v.tokens)}</td><td class="num">${fmt(v.cost_micros)}</td></tr>`).join("");
   el("spend").innerHTML = `<thead><tr><th>租户</th><th class="num">请求</th><th class="num">prompt</th>
     <th class="num">completion</th><th class="num">命中缓存</th><th class="num">花费 µ</th></tr></thead>
     <tbody>${rows || '<tr><td colspan="6" class="missing">尚无流水</td></tr>'}</tbody>
@@ -339,25 +625,21 @@ function renderReconcile(reconcile) {
   const equations = Object.entries(reconcile.equations || {}).map(([name, eq]) => {
     const zero = eq.delta === 0;
     return `<tr><td>${esc(name)}</td><td class="num">${fmt(eq.ledger)}</td>`
-      + `<td class="num">${fmt(eq.counters)}</td>`
-      + `<td class="num">${chip(zero ? "delta 0" : "delta " + fmt(eq.delta), zero ? "ok" : "bad")}</td></tr>`;
+      + `<td class="num">${fmt(eq.counters)}</td><td class="num">${chip(zero ? "delta 0" : "delta " + fmt(eq.delta), zero ? "ok" : "bad")}</td></tr>`;
   }).join("");
   const durability = Object.entries(reconcile.durability || {}).map(([k, v]) =>
-    `<tr><td>${esc(k)}</td><td class="num${v ? "" : " missing"}">${fmt(typeof v === "number" ? v : Number(v))}</td></tr>`).join("");
+    `<tr><td>${esc(k)}</td><td class="num${v ? "" : " missing"}">${fmt(Number(v))}</td><td></td><td></td></tr>`).join("");
   const integrity = reconcile.integrity || {};
   const matched = integrity.rows === integrity.distinct_request_ids;
-
-  el("reconcile").innerHTML = `<thead><tr><th>等式</th><th class="num">流水</th><th class="num">指标</th><th></th></tr></thead>
+  el("reconcile").innerHTML = `<thead><tr><th>等式（本进程）</th><th class="num">流水</th><th class="num">指标</th><th></th></tr></thead>
     <tbody>${equations || '<tr><td colspan="4" class="missing">尚无流量</td></tr>'}</tbody>
-    <thead><tr><th>持久化</th><th class="num">值</th><th colspan="2"></th></tr></thead><tbody>${durability}</tbody>
+    <thead><tr><th>持久化</th><th class="num">值</th><th></th><th></th></tr></thead><tbody>${durability}</tbody>
     <thead><tr><th>完整性</th><th class="num">值</th><th colspan="2"></th></tr></thead>
     <tbody><tr><td>rows / distinct request_id</td><td class="num">${fmt(integrity.rows)} / ${fmt(integrity.distinct_request_ids)}</td>
     <td colspan="2">${chip(matched ? "无重复计费" : "存在重复", matched ? "ok" : "bad")}</td></tr></tbody>`;
-
   const inferred = reconcile.inferred_pricing || {};
-  el("reconcile-note").textContent =
-    `推断计价单列不参与等式：abandoned=${fmt(inferred.abandoned_tokens)} token，error=${fmt(inferred.error_tokens)} token。`
-    + (reconcile.scope || "");
+  el("reconcile-note").textContent = `推断计价单列、不参与等式：abandoned=${fmt(inferred.abandoned_tokens)} token，`
+    + `error=${fmt(inferred.error_tokens)} token。${reconcile.scope || ""}`;
 }
 
 function drawSpark(rate) {
@@ -365,20 +647,25 @@ function drawSpark(rate) {
   const ctx = canvas.getContext("2d");
   const w = canvas.width, h = canvas.height;
   ctx.clearRect(0, 0, w, h);
-  if (state.history.length < 2) return;
+  if (state.history.length < 2) {
+    ctx.fillStyle = "#4a5462";
+    ctx.font = "11px ui-monospace, monospace";
+    ctx.fillText("等待第二个采样点…", 8, h / 2);
+    return;
+  }
   const max = Math.max(...state.history, 1);
   ctx.beginPath();
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 1.6;
   ctx.strokeStyle = "#58a6ff";
   state.history.forEach((value, i) => {
     const x = (i / (state.history.length - 1)) * w;
-    const y = h - (value / max) * (h - 6) - 3;
+    const y = h - (value / max) * (h - 18) - 4;
     i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
   });
   ctx.stroke();
-  ctx.fillStyle = "#8b949e";
+  ctx.fillStyle = "#7e8b9c";
   ctx.font = "11px ui-monospace, monospace";
-  ctx.fillText(`峰值 ${fmt(max)} rps · 当前 ${fmt(rate ?? 0)} rps`, 6, 13);
+  ctx.fillText(`峰值 ${fmt(max)} rps · 当前 ${fmt(rate ?? 0)} rps`, 8, 13);
 }
 
 async function refresh() {
@@ -401,20 +688,24 @@ async function refresh() {
       if (dt > 0) {
         rate = Math.max(0, (total - state.lastTotal) / dt);
         state.history.push(rate);
-        if (state.history.length > 90) state.history.shift();
+        if (state.history.length > 120) state.history.shift();
       }
     }
     state.lastTotal = total;
     state.lastAt = now;
 
-    renderLive(metrics, rate);
+    renderTiles(metrics);
+    renderPipeline(metrics, routing);
     renderLatency(metrics);
+    renderUpstreamLatency(metrics);
     renderUpstreams(routing, metrics);
     renderOutcomes(metrics);
+    renderCounters(metrics);
     renderSpend(summary);
     renderReconcile(reconcile);
     drawSpark(rate);
-    el("status").textContent = `已更新 · ${new Date().toLocaleTimeString()} · ${Date.now() - startedAt}ms`;
+
+    el("status").textContent = `已更新 ${new Date().toLocaleTimeString()} · ${Date.now() - startedAt}ms`;
     el("status").className = "";
   } catch (e) {
     el("status").textContent = "读取失败：" + e.message;
@@ -424,13 +715,13 @@ async function refresh() {
 
 function schedule() {
   clearInterval(state.timer);
-  const ms = Number(el("interval").value);
-  if (ms > 0) state.timer = setInterval(refresh, ms);
+  const interval = Number(el("interval").value);
+  if (interval > 0) state.timer = setInterval(refresh, interval);
 }
 
 el("refresh").addEventListener("click", refresh);
 el("interval").addEventListener("change", schedule);
-el("token").addEventListener("change", () => { state.history = []; state.lastTotal = null; refresh(); });
+el("token").addEventListener("change", () => { state.history = []; state.lastTotal = null; state.prev = {}; refresh(); });
 
 schedule();
 refresh();

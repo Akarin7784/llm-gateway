@@ -49,6 +49,7 @@ public class ModelRouter {
     public List<UpstreamTarget> candidates(String model) {
         List<UpstreamTarget> configured = catalog.get(model);
         if (configured == null || configured.isEmpty()) {
+            metrics.reject("model_not_found");
             throw GatewayException.modelNotFound(model);
         }
 

@@ -2,6 +2,7 @@ package com.example.llmgw.auth;
 
 import com.example.llmgw.api.GatewayException;
 import com.example.llmgw.api.OpenAiErrorWriter;
+import com.example.llmgw.obs.GatewayMetrics;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,10 +24,12 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
 
     private final TenantRegistry tenants;
     private final OpenAiErrorWriter errorWriter;
+    private final GatewayMetrics metrics;
 
-    public ApiKeyAuthFilter(TenantRegistry tenants, OpenAiErrorWriter errorWriter) {
+    public ApiKeyAuthFilter(TenantRegistry tenants, OpenAiErrorWriter errorWriter, GatewayMetrics metrics) {
         this.tenants = tenants;
         this.errorWriter = errorWriter;
+        this.metrics = metrics;
     }
 
     @Override
@@ -46,6 +49,7 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         try {
             tenant = tenants.authenticate(apiKey);
         } catch (GatewayException e) {
+            metrics.reject("auth");
             errorWriter.write(e, response);
             return;
         }

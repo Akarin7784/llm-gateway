@@ -414,12 +414,15 @@ public class ChatCompletionController {
         try {
             request = mapper.treeToValue(raw, ChatCompletionRequest.class);
         } catch (JsonProcessingException | IllegalArgumentException e) {
+            metrics.reject("bad_request");
             throw GatewayException.badRequest("malformed chat completion request: " + e.getMessage());
         }
         if (request.model() == null || request.model().isBlank()) {
+            metrics.reject("bad_request");
             throw GatewayException.badRequest("'model' is required");
         }
         if (request.messages() == null || request.messages().isEmpty()) {
+            metrics.reject("bad_request");
             throw GatewayException.badRequest("'messages' must not be empty");
         }
         return request;

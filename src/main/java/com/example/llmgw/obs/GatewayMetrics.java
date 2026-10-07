@@ -24,6 +24,15 @@ public class GatewayMetrics {
         registry.gauge("gateway.streams.active", activeStreams, AtomicInteger::get);
     }
 
+    /**
+     * Traffic that never reaches the next stage, tagged with where it left. A pipeline view that only
+     * counts what succeeded cannot answer "where did my requests go", and a 401 at the gate is invisible
+     * in every other metric the gateway emits.
+     */
+    public void reject(String stage) {
+        registry.counter("gateway.rejected", "stage", stage).increment();
+    }
+
     public void attempt(String tenant, String model, String upstream, String outcome) {
         registry.counter("gateway.requests", "tenant", tenant, "model", model,
                 "upstream", upstream, "outcome", outcome).increment();
